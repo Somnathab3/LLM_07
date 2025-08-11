@@ -1,0 +1,58 @@
+[
+  {
+    "record_id": "resolution_20250811_225122_5966",
+    "timestamp": "2025-08-11T22:52:53.518129",
+    "conflict_context": {
+      "ownship_callsign": "TEST001",
+      "ownship_state": {
+        "altitude": 35000,
+        "heading": 90,
+        "speed": 450,
+        "latitude": 40.0,
+        "longitude": -75.0
+      },
+      "intruders": [
+        {
+          "callsign": "TEST002",
+          "altitude": 35000,
+          "heading": 270,
+          "speed": 420,
+          "latitude": 40.1,
+          "longitude": -74.9
+        }
+      ],
+      "scenario_time": 3600,
+      "lookahead_minutes": 10,
+      "constraints": {},
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "resolution_type": "altitude_change",
+      "parameters": {
+        "new_altitude": 37000
+      },
+      "reasoning": "Test resolution for memory system",
+      "confidence": 0.8
+    },
+    "outcome_metrics": {
+      "success_rate": 0.91116,
+      "safety_margin": 5.473599999999999,
+      "response_time": 2.3277
+    },
+    "scenario_features": {
+      "approach_angle": 180,
+      "speed_ratio": 0.9333333333333333,
+      "altitude_separation": 0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "overtaking",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  }
+]

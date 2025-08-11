@@ -1,0 +1,358 @@
+[
+  {
+    "record_id": "resolution_20250811_225122_5966",
+    "timestamp": "2025-08-11T22:52:53.518129",
+    "conflict_context": {
+      "ownship_callsign": "TEST001",
+      "ownship_state": {
+        "altitude": 35000,
+        "heading": 90,
+        "speed": 450,
+        "latitude": 40.0,
+        "longitude": -75.0
+      },
+      "intruders": [
+        {
+          "callsign": "TEST002",
+          "altitude": 35000,
+          "heading": 270,
+          "speed": 420,
+          "latitude": 40.1,
+          "longitude": -74.9
+        }
+      ],
+      "scenario_time": 3600,
+      "lookahead_minutes": 10,
+      "constraints": {},
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "resolution_type": "altitude_change",
+      "parameters": {
+        "new_altitude": 37000
+      },
+      "reasoning": "Test resolution for memory system",
+      "confidence": 0.8
+    },
+    "outcome_metrics": {
+      "success_rate": 0.91116,
+      "safety_margin": 5.473599999999999,
+      "response_time": 2.3277
+    },
+    "scenario_features": {
+      "approach_angle": 180,
+      "speed_ratio": 0.9333333333333333,
+      "altitude_separation": 0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "overtaking",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250811_231647_0691",
+    "timestamp": "2025-08-11T23:18:18.648661",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754947007.9334242
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 1.0,
+          "timestamp": 1754947007.9334242
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "parameters": {
+        "new_heading_deg": 270.0
+      },
+      "reasoning": "To maintain safe separation, instruct OWNSHIP to turn towards the intruder (INTRUDER1) and establish a heading of 270\u00b0. This will allow for a gradual increase in distance between the two aircraft.",
+      "confidence": 0.8999999999999999,
+      "source": "llm",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250811_233213_3423",
+    "timestamp": "2025-08-11T23:37:06.136512",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754947933.6922016
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 1.0,
+          "timestamp": 1754947933.6922016
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "parameters": {
+        "new_heading_deg": 270.0
+      },
+      "reasoning": "To maintain safe separation, instruct OWNSHIP to turn towards the intruder (INTRUDER1) and establish a heading of 270\u00b0. This will allow for a gradual increase in distance between the two aircraft.",
+      "confidence": 0.8999999999999999,
+      "source": "llm",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_001803_0096",
+    "timestamp": "2025-08-12T00:18:03.595203",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754950683.5944588
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 1.0,
+          "timestamp": 1754950683.5944588
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "parameters": {
+        "new_heading_deg": 9.0
+      },
+      "reasoning": "Fallback resolution: 20-degree right turn",
+      "confidence": 0.3,
+      "source": "llm",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_002424_6179",
+    "timestamp": "2025-08-12T00:24:24.512527",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 1.0,
+        "timestamp": 1754951064.512527
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 1.0,
+          "speed_kt": 1.0,
+          "vertical_speed_fpm": 8.0,
+          "timestamp": 1754951064.512527
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "parameters": {
+        "new_heading_deg": 28.0
+      },
+      "reasoning": "Fallback resolution: 20-degree right turn",
+      "confidence": 0.3,
+      "source": "llm",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 0.125,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  }
+]

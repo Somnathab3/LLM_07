@@ -13,10 +13,14 @@ pyyaml>=5.4.0
 # ML and AI
 openai>=1.0.0
 faiss-cpu>=1.7.0
+sentence-transformers>=2.2.0
 
 # Networking and APIs
 requests>=2.25.0
 websocket-client>=1.0.0
+
+# Simulation and aerospace
+bluesky-simulator>=1.0.0  # BlueSky ATM simulator
 
 # CLI and utilities
 click>=8.0.0

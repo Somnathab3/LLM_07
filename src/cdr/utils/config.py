@@ -28,7 +28,13 @@ class Config:
             self.llm = {
                 'provider': 'ollama',
                 'model': 'llama3.1:8b',
-                'temperature': 0.1
+                'temperature': 0.3,
+                'seed': 1337,
+                'num_predict': 192,
+                'enable_verifier': True,
+                'enable_agree_on_two': False,
+                'prompt_char_limit': 12000,
+                'max_intruders': 3
             }
         
         if self.bluesky is None:
