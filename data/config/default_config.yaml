@@ -1,0 +1,27 @@
+# LLM_ATC7 Default Configuration
+
+simulation:
+  cycle_interval_seconds: 60.0
+  lookahead_minutes: 10.0
+  max_simulation_time_minutes: 120.0
+  separation_min_nm: 5.0
+  separation_min_ft: 1000.0
+  detection_range_nm: 100.0
+
+llm:
+  provider: "ollama"
+  model: "llama3.1:8b"
+  temperature: 0.1
+  max_tokens: 1000
+  timeout: 30.0
+
+bluesky:
+  host: "127.0.0.1"
+  port: 8888
+  headless: true
+  fast_time_factor: 10.0
+
+memory:
+  enabled: true
+  embedding_dim: 768
+  max_experiences: 10000
