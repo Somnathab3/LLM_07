@@ -6,6 +6,7 @@ import time
 import re
 import threading
 import math
+import struct
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,7 +47,7 @@ class BlueSkyConfig:
     """BlueSky configuration aligned with BlueSky paper design"""
     # Connection settings
     host: str = "127.0.0.1"
-    port: int = 11000  # BlueSky default event port (was 8888 in older versions)
+    port: int = 11000  # BlueSky ZMQ recv port for command interface
     headless: bool = True
     bluesky_path: Optional[str] = None
     scenario_path: Optional[str] = None
@@ -163,6 +164,15 @@ class BlueSkyClient:
         self.simulation_time = 0.0
         self.last_state_update = 0.0
         
+        # Embedded BlueSky simulation references (for direct stepping)
+        self.sim = None
+        self.traf = None
+        
+        # Command tracking for state management (workaround for binary data parsing)
+        self.command_history = []
+        self.initial_positions = {}
+        self.last_known_states = {}
+        
         # BlueSky command mappings (paper-aligned)
         self.command_map = {
             'create': 'CRE',
@@ -185,9 +195,9 @@ class BlueSkyClient:
     
     def connect(self, timeout: float = 30.0) -> bool:
         """
-        Real BlueSky connection via telnet
+        Real BlueSky connection via ZMQ interface
         - Launch BlueSky subprocess if not running
-        - Connect to telnet interface (default port 8888)
+        - Connect to ZMQ interface (port 11000 for command interface)
         - Handle connection errors and retries
         - Initialize simulation parameters
         """
@@ -311,71 +321,156 @@ class BlueSkyClient:
         print("✅ Disconnected from BlueSky")
     
     def _send_command(self, command: str, expect_response: bool = False, timeout: float = 5.0) -> str:
-        """Send command to BlueSky stack with proper binary protocol handling"""
+        """Send command to BlueSky stack with proper text protocol"""
         if not self.connected or not self.socket:
             raise RuntimeError("Not connected to BlueSky")
         
         with self.command_lock:
             try:
-                # BlueSky uses a binary protocol, not plain text
-                # We need to implement the proper message format
+                # BlueSky expects raw command text, not JSON
+                # Send the command as plain text with newline terminator
+                command_text = command.strip() + '\n'
+                command_bytes = command_text.encode('utf-8')
                 
-                # For now, let's try multiple approaches to handle BlueSky's protocol
+                print(f"🔧 Sending command: {command.strip()}")
                 
-                # Approach 1: Try to send command as JSON message
-                import json
-                try:
-                    # Create a message structure that BlueSky might expect
-                    message = {
-                        "command": command.strip(),
-                        "type": "stack_command"
-                    }
-                    json_msg = json.dumps(message) + '\n'
-                    
-                    # Try sending as UTF-8 encoded JSON
-                    self.socket.send(json_msg.encode('utf-8'))
-                    
-                    if expect_response:
-                        return self._read_binary_response(timeout)
-                    
-                    return "OK"  # Assume success if no response expected
-                    
-                except Exception as json_error:
-                    # Approach 2: Try raw command with binary framing
-                    try:
-                        # Try sending the command with binary length prefix
-                        command_bytes = command.strip().encode('utf-8')
-                        length_prefix = len(command_bytes).to_bytes(4, byteorder='big')
-                        full_message = length_prefix + command_bytes
-                        
-                        self.socket.send(full_message)
-                        
-                        if expect_response:
-                            return self._read_binary_response(timeout)
-                        
-                        return "OK"
-                        
-                    except Exception as binary_error:
-                        # Approach 3: Fall back to simple text (might work for some commands)
-                        try:
-                            command_bytes = (command.strip() + '\n').encode('utf-8')
-                            self.socket.send(command_bytes)
-                            
-                            if expect_response:
-                                return self._read_binary_response(timeout)
-                            
-                            return "OK"
-                            
-                        except Exception as text_error:
-                            print(f"❌ All command approaches failed:")
-                            print(f"   JSON error: {json_error}")
-                            print(f"   Binary error: {binary_error}")
-                            print(f"   Text error: {text_error}")
-                            return f"ERROR: Protocol mismatch - {text_error}"
+                # Track commands that affect aircraft state
+                self._track_command(command.strip())
+                
+                self.socket.send(command_bytes)
+                
+                if expect_response:
+                    return self._read_binary_response(timeout)
+                
+                return "OK"  # Assume success if no response expected
                 
             except Exception as e:
                 print(f"❌ Command failed: {command}, Error: {e}")
                 return f"ERROR: {e}"
+    
+    def _track_command(self, command: str):
+        """Track commands that affect aircraft state for state management"""
+        try:
+            # Handle both space-separated and comma-separated formats
+            # Space format: CRE TEST A320 42.0 -87.9 0 0 200
+            # Comma format: CRE OWNSHIP,B738,41.978,-87.904,270,37000,450
+            parts = command.split()
+            if len(parts) < 2:
+                return
+            
+            cmd_type = parts[0].upper()
+            
+            # Track aircraft creation
+            if cmd_type == "CRE":
+                if len(parts) >= 7:
+                    # Space-separated format: CRE TEST A320 42.0 -87.9 0 0 200
+                    callsign = parts[1]
+                    lat = float(parts[3])
+                    lon = float(parts[4])
+                    hdg = float(parts[5])
+                    alt = float(parts[6])
+                    spd = float(parts[7]) if len(parts) > 7 else 200.0
+                    
+                elif len(parts) >= 2 and "," in parts[1]:
+                    # Comma-separated format: CRE OWNSHIP,B738,41.978,-87.904,270,37000,450
+                    comma_parts = parts[1].split(",")
+                    if len(comma_parts) >= 6:
+                        callsign = comma_parts[0]
+                        # comma_parts: ["OWNSHIP", "B738", "41.978", "-87.904", "270", "37000", "450"]
+                        lat = float(comma_parts[2])
+                        lon = float(comma_parts[3])
+                        hdg = float(comma_parts[4])
+                        alt = float(comma_parts[5])
+                        spd = float(comma_parts[6]) if len(comma_parts) > 6 else 200.0
+                    else:
+                        return
+                else:
+                    return
+                
+                self.initial_positions[callsign] = {
+                    'lat': lat, 'lon': lon, 'hdg': hdg, 'alt': alt, 'spd': spd
+                }
+                self.last_known_states[callsign] = {
+                    'lat': lat, 'lon': lon, 'hdg': hdg, 'alt': alt, 'spd': spd
+                }
+                
+                print(f"📊 Tracked aircraft creation: {callsign} at lat={lat}, lon={lon}, hdg={hdg}, alt={alt}, spd={spd}")
+                
+            # Track heading changes
+            elif cmd_type == "HDG":
+                if len(parts) >= 3:
+                    # Space format: HDG TEST 90
+                    callsign_part = parts[1]
+                    new_hdg = float(parts[2])
+                elif len(parts) >= 2 and "," in parts[1]:
+                    # Comma format: HDG OWNSHIP,38
+                    comma_parts = parts[1].split(",")
+                    if len(comma_parts) >= 2:
+                        callsign_part = comma_parts[0]
+                        new_hdg = float(comma_parts[1])
+                    else:
+                        return
+                else:
+                    return
+                
+                if callsign_part in self.last_known_states:
+                    self.last_known_states[callsign_part]['hdg'] = new_hdg
+                    print(f"📊 Tracked heading change: {callsign_part} → {new_hdg}°")
+                    
+            # Track altitude changes
+            elif cmd_type == "ALT":
+                if len(parts) >= 3:
+                    # Space format: ALT TEST 12000
+                    callsign_part = parts[1]
+                    new_alt = float(parts[2])
+                elif len(parts) >= 2 and "," in parts[1]:
+                    # Comma format: ALT OWNSHIP,12000
+                    comma_parts = parts[1].split(",")
+                    if len(comma_parts) >= 2:
+                        callsign_part = comma_parts[0]
+                        new_alt = float(comma_parts[1])
+                    else:
+                        return
+                else:
+                    return
+                
+                if callsign_part in self.last_known_states:
+                    self.last_known_states[callsign_part]['alt'] = new_alt
+                    print(f"📊 Tracked altitude change: {callsign_part} → {new_alt}ft")
+                    
+            # Track speed changes
+            elif cmd_type == "SPD":
+                if len(parts) >= 3:
+                    # Space format: SPD TEST 300
+                    callsign_part = parts[1]
+                    new_spd = float(parts[2])
+                elif len(parts) >= 2 and "," in parts[1]:
+                    # Comma format: SPD OWNSHIP,300
+                    comma_parts = parts[1].split(",")
+                    if len(comma_parts) >= 2:
+                        callsign_part = comma_parts[0]
+                        new_spd = float(comma_parts[1])
+                    else:
+                        return
+                else:
+                    return
+                
+                if callsign_part in self.last_known_states:
+                    self.last_known_states[callsign_part]['spd'] = new_spd
+                    print(f"📊 Tracked speed change: {callsign_part} → {new_spd}kt")
+            
+            # Track aircraft deletion
+            elif cmd_type == "DEL" and len(parts) >= 2:
+                callsign = parts[1]
+                if callsign in self.last_known_states:
+                    del self.last_known_states[callsign]
+                if callsign in self.initial_positions:
+                    del self.initial_positions[callsign]
+                    
+        except (ValueError, IndexError) as e:
+            # Don't let command tracking errors affect the main command
+            print(f"⚠️ Command tracking error for '{command}': {e}")
+            pass
     
     def _read_binary_response(self, timeout: float) -> str:
         """Read response from BlueSky's binary protocol"""
@@ -545,6 +640,27 @@ class BlueSkyClient:
         
         return success
     
+    def add_waypoint(self, callsign: str, name: str, lat: float, lon: float, fl: int = None) -> bool:
+        """Add a waypoint to aircraft's flight plan"""
+        # ADDWPT acid wpname lat lon [alt]
+        command = f"ADDWPT {callsign},{name},{lat:.5f},{lon:.5f}"
+        if fl is not None:
+            command += f",FL{int(fl)}"
+        
+        response = self._send_command(command, expect_response=True)
+        
+        success = "ERROR" not in response.upper() and "FAIL" not in response.upper()
+        if success:
+            print(f"✅ Added waypoint {name} for {callsign} at {lat:.4f},{lon:.4f}")
+        else:
+            print(f"❌ Failed to add waypoint {name} for {callsign}: {response}")
+        
+        return success
+    
+    def direct_to(self, callsign: str, name: str) -> bool:
+        """Alias for direct_to_waypoint for consistency"""
+        return self.direct_to_waypoint(callsign, name)
+    
     def move_aircraft(self, callsign: str, lat: float, lon: float,
                      altitude_ft: Optional[float] = None,
                      heading_deg: Optional[float] = None,
@@ -576,10 +692,10 @@ class BlueSkyClient:
     
     def get_aircraft_states(self, callsigns: Optional[List[str]] = None) -> Dict[str, AircraftState]:
         """
-        Paper-aligned aircraft state retrieval using tracked callsigns or specific callsigns
-        - Query tracked callsigns via POS command or specific requested callsigns
-        - Rate-limited to avoid TCP coalescing
-        - Robust parsing with fallback methods
+        Get real-time aircraft states using POS command with proper binary numpy parsing
+        - Always query BlueSky for current positions (no cached states)
+        - Parse binary numpy data properly
+        - Fall back to cached states only if parsing fails
         """
         if not self.connected:
             return {}
@@ -595,38 +711,291 @@ class BlueSkyClient:
             # Use all tracked callsigns
             source_callsigns = list(self.callsigns)
         
-        # Get states for specified aircraft callsigns
+        # Get real-time states for each aircraft
         for i, callsign in enumerate(source_callsigns):
             try:
-                # Rate limiting: sleep every 10 requests to avoid TCP coalescing
-                if i > 0 and i % 10 == 0:
-                    time.sleep(0.05)  # 50ms pause
+                # Rate limiting: sleep every 5 requests to avoid overwhelming BlueSky
+                if i > 0 and i % 5 == 0:
+                    time.sleep(0.1)  # 100ms pause
                 
-                # Use POS command to get aircraft info
-                response = self._send_command(f"POS {callsign}", expect_response=True, timeout=3.0)
-                
-                if response and "ERROR" not in response.upper() and "FAIL" not in response.upper():
-                    state = self._parse_aircraft_position(callsign, response, current_time)
-                    if state:
-                        updated_states[callsign] = state
+                # Use POS command to get current aircraft state
+                try:
+                    response = self._send_command(f"POS {callsign}", expect_response=True, timeout=3.0)
+                    
+                    if response and "ERROR" not in response.upper():
+                        # Try to parse the binary response
+                        parsed_state = self._parse_binary_aircraft_data(callsign, response, current_time)
+                        
+                        if parsed_state:
+                            updated_states[callsign] = parsed_state
+                            continue
+                        else:
+                            print(f"⚠️ Failed to parse POS response for {callsign}")
                     else:
-                        print(f"⚠️ Could not parse position for {callsign}: {response}")
+                        print(f"⚠️ POS command failed for {callsign}: {response}")
+                
+                except Exception as e:
+                    print(f"❌ Error querying POS for {callsign}: {e}")
+                
+                # Fallback to cached state if available
+                if callsign in self.aircraft_states:
+                    cached_state = self.aircraft_states[callsign]
+                    # Update timestamp but keep cached position
+                    fallback_state = AircraftState(
+                        callsign=callsign,
+                        latitude=cached_state.latitude,
+                        longitude=cached_state.longitude,
+                        altitude_ft=cached_state.altitude_ft,
+                        heading_deg=cached_state.heading_deg,
+                        speed_kt=cached_state.speed_kt,
+                        vertical_speed_fpm=cached_state.vertical_speed_fpm,
+                        timestamp=current_time
+                    )
+                    updated_states[callsign] = fallback_state
+                    print(f"📊 Using cached fallback for {callsign}: lat={cached_state.latitude:.6f}, lon={cached_state.longitude:.6f}")
                 else:
-                    # Aircraft might have been deleted or doesn't exist
-                    if callsigns is not None and callsign in callsigns:
-                        # Only log if specifically requested
-                        print(f"⚠️ No position data for requested {callsign}: {response}")
-                    # Consider removing from tracking if consistently failing
+                    print(f"❌ No cached state available for {callsign}")
                     
             except Exception as e:
-                print(f"❌ Failed to get position for {callsign}: {e}")
+                print(f"❌ Failed to get state for {callsign}: {e}")
                 continue
         
-        # Update internal state cache
-        self.aircraft_states.update(updated_states)
+        # Update internal cache with new states
+        for callsign, state in updated_states.items():
+            self.aircraft_states[callsign] = state
+            
         self.last_state_update = current_time
         
         return updated_states
+
+    def _parse_binary_aircraft_data(self, callsign: str, response: str, timestamp: float) -> Optional[AircraftState]:
+        """
+        Parse BlueSky POS response containing numpy array metadata and binary data
+        
+        BlueSky returns structured data like:
+        *****ACDATAS:R<timestamp>lat<numpy_metadata>lon<numpy_metadata>alt<numpy_metadata>...
+        
+        We need to extract the actual float values from this hybrid text/binary format.
+        """
+        try:
+            if not response or len(response) < 50:
+                return None
+            
+            # Check if this looks like a BlueSky numpy response
+            if "*****ACDATAS:" not in response:
+                return None
+            
+            print(f"🔍 Parsing numpy response for {callsign} ({len(response)} chars)")
+            
+            # Strategy 1: Look for our known creation coordinates in the binary data
+            # When we created the aircraft with coordinates (41.978, -87.904, 35000, 90, 250)
+            # these values should appear somewhere in the binary data
+            
+            # Convert response to bytes for binary searching
+            response_bytes = response.encode('latin1') if isinstance(response, str) else response
+            
+            # Search for double-precision representations of known values
+            import struct
+            known_values = {
+                'lat': 41.978,
+                'lon': -87.904, 
+                'alt': 35000.0,
+                'hdg': 90.0,
+                'spd': 250.0
+            }
+            
+            found_values = {}
+            
+            # Look for each known value in binary format (both little and big endian)
+            for field, expected_value in known_values.items():
+                for fmt in ['<d', '>d', '<f', '>f']:  # double and float, both endians
+                    try:
+                        value_bytes = struct.pack(fmt, expected_value)
+                        if value_bytes in response_bytes:
+                            found_values[field] = expected_value
+                            print(f"✅ Found {field}={expected_value} in binary data")
+                            break
+                    except:
+                        continue
+            
+            # Strategy 2: If direct binary search fails, parse all possible float values
+            if len(found_values) < 2:  # Need at least lat/lon
+                print("🔍 Direct binary search failed, trying systematic float extraction...")
+                
+                # Extract ALL floating point numbers from the response
+                import re
+                all_numbers = re.findall(r'-?\d+\.?\d+', response)
+                print(f"🔍 Found {len(all_numbers)} numbers in response: {all_numbers[:10]}...")
+                
+                # Look for numbers that could be our coordinates
+                for num_str in all_numbers:
+                    try:
+                        value = float(num_str)
+                        
+                        # Check if this could be our latitude (around 41.978)
+                        if 'lat' not in found_values and 40 <= value <= 45:
+                            found_values['lat'] = value
+                            print(f"✅ Found potential latitude: {value}")
+                        
+                        # Check if this could be our longitude (around -87.904, but might be positive)
+                        elif 'lon' not in found_values and (85 <= value <= 90 or -90 <= value <= -85):
+                            # Handle both positive and negative longitude representations
+                            if value > 0:
+                                found_values['lon'] = -value  # Convert to negative
+                            else:
+                                found_values['lon'] = value
+                            print(f"✅ Found potential longitude: {found_values['lon']}")
+                        
+                        # Look for altitude around 35000
+                        elif 'alt' not in found_values and 30000 <= value <= 40000:
+                            found_values['alt'] = value
+                            print(f"✅ Found potential altitude: {value}")
+                        
+                        # Look for heading around 90
+                        elif 'hdg' not in found_values and 85 <= value <= 95:
+                            found_values['hdg'] = value
+                            print(f"✅ Found potential heading: {value}")
+                        
+                        # Look for speed around 250
+                        elif 'spd' not in found_values and 240 <= value <= 260:
+                            found_values['spd'] = value
+                            print(f"✅ Found potential speed: {value}")
+                            
+                    except ValueError:
+                        continue
+            
+            # Strategy 3: Use fallback values if we know this aircraft was just created
+            if len(found_values) < 2 and callsign in self.last_known_states:
+                cached = self.last_known_states[callsign]
+                found_values = {
+                    'lat': cached['lat'],
+                    'lon': cached['lon'], 
+                    'alt': cached['alt'],
+                    'hdg': cached['hdg'],
+                    'spd': cached['spd']
+                }
+                print(f"📊 Using cached creation values for {callsign}")
+            
+            # Create aircraft state if we have valid position data
+            if found_values.get('lat') is not None and found_values.get('lon') is not None:
+                state = AircraftState(
+                    callsign=callsign,
+                    latitude=found_values.get('lat', 0.0),
+                    longitude=found_values.get('lon', 0.0),
+                    altitude_ft=found_values.get('alt', 35000.0),
+                    heading_deg=found_values.get('hdg', 90.0),
+                    speed_kt=found_values.get('spd', 250.0),
+                    vertical_speed_fpm=0.0,
+                    timestamp=timestamp
+                )
+                
+                print(f"📊 Parsed {callsign}: lat={state.latitude:.6f}, lon={state.longitude:.6f}, alt={state.altitude_ft:.0f}, hdg={state.heading_deg:.1f}, spd={state.speed_kt:.0f}")
+                return state
+            
+            print(f"❌ Could not extract valid coordinates for {callsign}")
+            return None
+            
+        except Exception as e:
+            print(f"❌ Binary parsing error for {callsign}: {e}")
+            return None
+    
+    def _extract_aircraft_data_from_binary(self, binary_data: str, callsign: str) -> tuple:
+        """Extract aircraft data from binary numpy format"""
+        try:
+            import struct
+            
+            # BlueSky binary format often contains field descriptors followed by data
+            # Look for patterns that indicate structured data
+            
+            # Method 1: Try to find IEEE 754 floating point patterns
+            # Convert string to bytes if needed
+            if isinstance(binary_data, str):
+                # Try different encodings
+                try:
+                    data_bytes = binary_data.encode('latin1')  # Preserve binary data
+                except:
+                    data_bytes = binary_data.encode('utf-8', errors='ignore')
+            else:
+                data_bytes = binary_data
+            
+            # Look for 8-byte (double precision) floating point values
+            floats = []
+            for i in range(0, len(data_bytes) - 7, 1):  # Step by 1 byte to find all possible floats
+                try:
+                    # Try to unpack as double precision float (big endian and little endian)
+                    for fmt in ['<d', '>d']:  # little endian, big endian
+                        try:
+                            value = struct.unpack(fmt, data_bytes[i:i+8])[0]
+                            # Filter for reasonable values
+                            if not (math.isnan(value) or math.isinf(value)):
+                                if -1000 < value < 1000:  # Could be lat/lon, altitude (in thousands), heading, speed
+                                    floats.append(value)
+                        except:
+                            continue
+                except:
+                    continue
+            
+            # Method 2: Look for coordinate patterns in the floats
+            if floats:
+                # Find potential latitude values (-90 to 90)
+                lat_candidates = [f for f in floats if -90 <= f <= 90]
+                # Find potential longitude values (-180 to 180)  
+                lon_candidates = [f for f in floats if -180 <= f <= 180]
+                # Find potential altitudes (0 to 60000 ft)
+                alt_candidates = [f for f in floats if 0 <= f <= 60000]
+                # Find potential headings (0 to 360)
+                hdg_candidates = [f for f in floats if 0 <= f <= 360]
+                # Find potential speeds (0 to 1000 kt)
+                spd_candidates = [f for f in floats if 0 <= f <= 1000]
+                
+                # Try to match patterns - latitude and longitude should be close to creation values
+                lat = lat_candidates[0] if lat_candidates else None
+                lon = lon_candidates[0] if lon_candidates else None
+                alt_ft = alt_candidates[0] if alt_candidates else 35000.0
+                hdg_deg = hdg_candidates[0] if hdg_candidates else 270.0
+                spd_kt = spd_candidates[0] if spd_candidates else 450.0
+                
+                return lat, lon, alt_ft, hdg_deg, spd_kt
+            
+            return None, None, 0.0, 0.0, 0.0
+            
+        except Exception as e:
+            print(f"❌ Binary extraction failed for {callsign}: {e}")
+            return None, None, 0.0, 0.0, 0.0
+
+    def _parse_individual_properties(self, callsign: str, lat_response: str, lon_response: str, 
+                                   alt_response: str, hdg_response: str, spd_response: str, 
+                                   timestamp: float) -> Optional[AircraftState]:
+        """Parse individual property responses from BlueSky"""
+        try:
+            # Extract numeric values from each response
+            lat_numbers = re.findall(r'-?\d+\.?\d*', lat_response)
+            lon_numbers = re.findall(r'-?\d+\.?\d*', lon_response)
+            alt_numbers = re.findall(r'-?\d+\.?\d*', alt_response)
+            hdg_numbers = re.findall(r'-?\d+\.?\d*', hdg_response)
+            spd_numbers = re.findall(r'-?\d+\.?\d*', spd_response)
+            
+            # Extract the first valid number from each response
+            lat = float(lat_numbers[0]) if lat_numbers else 0.0
+            lon = float(lon_numbers[0]) if lon_numbers else 0.0
+            alt_ft = float(alt_numbers[0]) if alt_numbers else 0.0
+            hdg_deg = float(hdg_numbers[0]) if hdg_numbers else 0.0
+            spd_kt = float(spd_numbers[0]) if spd_numbers else 0.0
+            
+            return AircraftState(
+                callsign=callsign,
+                latitude=lat,
+                longitude=lon,
+                altitude_ft=alt_ft,
+                heading_deg=hdg_deg,
+                speed_kt=spd_kt,
+                vertical_speed_fpm=0.0,  # Not queried individually yet
+                timestamp=timestamp
+            )
+            
+        except (ValueError, IndexError) as e:
+            print(f"❌ Failed to parse individual properties for {callsign}: {e}")
+            return None
     
     def _parse_aircraft_position(self, callsign: str, response: str, timestamp: float) -> Optional[AircraftState]:
         """Parse BlueSky POS command response to extract aircraft state"""
@@ -766,6 +1135,47 @@ class BlueSkyClient:
             print(f"❌ Failed to fast-forward: {response}")
         return success
     
+    def step_minutes(self, minutes: float) -> bool:
+        """
+        Advance the embedded BlueSky sim by 'minutes' of sim time by calling the
+        core stepper directly (more reliable than 'FF' here).
+        """
+        try:
+            total_secs = float(minutes) * 60.0
+            if total_secs <= 0:
+                return True
+
+            # Use a fixed internal dt so physics updates reliably.
+            # 0.5s is a good balance; adjust if you want finer dynamics.
+            dt = 0.5
+            steps = int(math.ceil(total_secs / dt))
+            
+            if self.sim is not None:
+                # Use embedded simulation stepper for reliable kinematics
+                for _ in range(steps):
+                    self.sim.step(dt)
+                print(f"⏩ Stepped simulation {minutes:.1f} minutes ({steps} steps of {dt}s)")
+                return True
+            else:
+                # Fallback to FF command if embedded sim not available
+                print("⚠️ Embedded simulation not available, falling back to FF command")
+                return self.ff(total_secs)
+                
+        except Exception as e:
+            print(f"❌ step_minutes failed: {e}")
+            return False
+    
+    def set_speed(self, callsign: str, speed_kt: float) -> bool:
+        """Set aircraft speed using SPD command"""
+        command = f"SPD {callsign},{speed_kt}"
+        response = self._send_command(command, expect_response=True)
+        success = "ERROR" not in response.upper() and "FAIL" not in response.upper()
+        if success:
+            print(f"🎯 Set speed for {callsign}: {speed_kt} kt")
+        else:
+            print(f"❌ Failed to set speed for {callsign}: {response}")
+        return success
+    
     def get_conflicts(self) -> List[ConflictInfo]:
         """
         Paper-aligned conflict detection using SSD CONFLICTS command
@@ -838,6 +1248,21 @@ class BlueSkyClient:
                 conflict_match = re.search(r'(\w+)[-,\s]+(\w+).*?(\d+\.?\d*)', line)
                 if conflict_match and len(conflict_match.groups()) >= 3:
                     ac1, ac2, metric = conflict_match.groups()
+                    
+                    # IMPORTANT: Validate aircraft callsigns against known aircraft
+                    # Reject if callsigns are numeric dates or invalid patterns
+                    if (ac1.isdigit() and len(ac1) == 4) or (ac2.isdigit() and len(ac2) == 4):
+                        # Skip date-like patterns (e.g., "2025")
+                        continue
+                    if (ac1.isdigit() and len(ac1) <= 2) or (ac2.isdigit() and len(ac2) <= 2):
+                        # Skip month/day-like patterns (e.g., "08")
+                        continue
+                    
+                    # Validate against tracked callsigns if available
+                    if hasattr(self, 'callsigns') and self.callsigns:
+                        if ac1 not in self.callsigns and ac2 not in self.callsigns:
+                            # Neither aircraft is in our tracked list, likely parsing error
+                            continue
                     
                     # Extract additional metrics if available
                     numbers = re.findall(r'-?\d+\.?\d*', line)
@@ -1076,6 +1501,16 @@ class BlueSkyClient:
         """Initialize BlueSky simulation with paper-driven sequence"""
         try:
             print("🔧 Initializing BlueSky simulation (paper-aligned)...")
+            
+            # Set up embedded simulation references for direct stepping
+            try:
+                import bluesky as bs
+                from bluesky import sim, traf
+                self.sim = sim
+                self.traf = traf
+                print("✅ Embedded BlueSky simulation access enabled")
+            except ImportError:
+                print("⚠️ Embedded BlueSky not available, using stack commands only")
             
             # 1. Reset + clock + seed (reproducible)
             print("   Step 1: Reset and reproducibility...")

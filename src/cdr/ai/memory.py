@@ -8,6 +8,9 @@ import numpy as np
 import logging
 import warnings
 
+# Import performance optimizations
+from .performance_config import PerformanceConfig
+
 # Configure Faiss to use CPU only and suppress GPU warnings
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Hide GPU from Faiss
@@ -131,10 +134,68 @@ class ExperienceMemory:
         self.logger.debug("Suppressed Faiss GPU warnings")
         
     def _initialize_embedding_model(self):
-        """Initialize the sentence transformer model for embeddings"""
+        """Initialize the sentence transformer model for embeddings with performance optimizations"""
         try:
+            # Enable performance optimizations
+            import torch
+            import os
+            
+            # Apply global optimizations
+            PerformanceConfig.apply_environment_optimizations()
+            
+            # Check for FlashAttention 2 support
+            flash_attention_available = False
+            if PerformanceConfig.ENABLE_FLASH_ATTENTION:
+                try:
+                    import flash_attn
+                    flash_attention_available = True
+                    self.logger.info("✅ FlashAttention 2 detected - enabling for faster inference")
+                except ImportError:
+                    self.logger.info("FlashAttention 2 not available - using standard attention")
+            
+            # Initialize model with optimizations
             self.embedding_model = SentenceTransformer(self.embedding_model_name, device=self.device)
+            
+            # Apply CUDA optimizations if on GPU
+            if self.device.startswith('cuda') and torch.cuda.is_available():
+                self.logger.info("Applying CUDA optimizations...")
+                
+                # Enable CUDA Graphs and torch.compile if supported
+                if (PerformanceConfig.ENABLE_TORCH_COMPILE and 
+                    hasattr(torch, 'compile') and torch.__version__ >= '2.0'):
+                    try:
+                        # Compile the model for faster inference
+                        compile_config = PerformanceConfig.get_torch_compile_config()
+                        self.embedding_model[0].auto_model = torch.compile(
+                            self.embedding_model[0].auto_model, 
+                            **compile_config
+                        )
+                        self.logger.info("✅ Enabled torch.compile with CUDA Graphs")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to enable torch.compile: {e}")
+                
+                # Enable FlashAttention if available and enabled
+                if flash_attention_available and PerformanceConfig.ENABLE_FLASH_ATTENTION:
+                    try:
+                        # Set attention implementation to flash_attention_2
+                        if hasattr(self.embedding_model[0].auto_model.config, 'attn_implementation'):
+                            self.embedding_model[0].auto_model.config.attn_implementation = PerformanceConfig.FLASH_ATTENTION_BACKEND
+                            self.logger.info("✅ Enabled FlashAttention 2")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to enable FlashAttention 2: {e}")
+                
+                # Optimize memory usage if enabled
+                if PerformanceConfig.ENABLE_CUDNN_BENCHMARK:
+                    torch.backends.cudnn.benchmark = True
+                    self.logger.info("✅ Enabled CUDNN benchmark mode")
+                
+                if PerformanceConfig.ENABLE_TF32:
+                    torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
+                    self.logger.info("✅ Enabled TF32 optimizations")
+            
             self.logger.info(f"Loaded embedding model: {self.embedding_model_name} on {self.device}")
+            
         except Exception as e:
             self.logger.warning(f"Failed to load embedding model {self.embedding_model_name}: {e}")
             # Fallback to simple feature vectors

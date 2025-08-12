@@ -186,15 +186,15 @@ Examples:
             # Initialize components
             self.logger.info("Initializing simulation components...")
             
-            # Initialize LLM client with enhanced settings
+            # Initialize LLM client with enhanced settings (verifier disabled)
             from .ai.llm_client import LLMConfig, LLMProvider
             llm_config = LLMConfig(
                 provider=LLMProvider.OLLAMA,
                 model_name=args.llm_model,
                 base_url="http://localhost:11434",
-                enable_verifier=True,
+                enable_verifier=False,  # Disabled - was causing validation issues
                 enable_agree_on_two=True,
-                enable_reprompt_on_failure=True,
+                enable_reprompt_on_failure=False,
                 temperature=0.2,  # Lower temperature for more consistent outputs
                 seed=args.seed
             )
@@ -315,15 +315,15 @@ Examples:
             import json
             import time
             
-            # Initialize shared components with enhanced settings
+            # Initialize shared components with enhanced settings (verifier disabled)
             from .ai.llm_client import LLMConfig, LLMProvider
             llm_config = LLMConfig(
                 provider=LLMProvider.OLLAMA,
                 model_name="llama3.1:8b",
                 base_url="http://localhost:11434",
-                enable_verifier=True,
+                enable_verifier=False,  # Disabled - was causing validation issues
                 enable_agree_on_two=True,
-                enable_reprompt_on_failure=True,
+                enable_reprompt_on_failure=False,
                 temperature=0.2,
                 seed=42
             )

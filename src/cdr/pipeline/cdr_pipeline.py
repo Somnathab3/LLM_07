@@ -84,9 +84,13 @@ class CDRPipeline:
         # Runtime state
         self.current_time: float = 0.0
         self.active_aircraft: Dict[str, Dict[str, Any]] = {}
+        self.aircraft_states: Dict[str, Dict[str, Any]] = {}  # Track aircraft states for completion check
         self.conflict_history: List[Dict[str, Any]] = []
         self.resolution_history: List[Dict[str, Any]] = []
         self.pending_intruders: List[Dict[str, Any]] = []
+        
+        # Route management for reroute_via resolutions
+        self.resume_tasks: Dict[str, Dict[str, Any]] = {}
         
         # Initialize conflict detector
         self.conflict_detector = ConflictDetector(
@@ -172,6 +176,12 @@ class CDRPipeline:
                 )
                 
                 if success:
+                    # Arm the aircraft with proper autopilot settings for movement
+                    callsign = ownship_data['callsign']
+                    self.bluesky_client.heading_command(callsign, ownship_data['heading_deg'])
+                    self.bluesky_client.altitude_command(callsign, ownship_data['altitude_ft'])
+                    self.bluesky_client.set_speed(callsign, ownship_data['speed_kt'])
+                    
                     self.active_aircraft[ownship_data['callsign']] = {
                         'callsign': ownship_data['callsign'],
                         'type': 'ownship',
@@ -196,6 +206,12 @@ class CDRPipeline:
                 )
                 
                 if success:
+                    # Arm the traffic aircraft with proper autopilot settings for movement
+                    callsign = traffic['callsign']
+                    self.bluesky_client.heading_command(callsign, traffic['heading_deg'])
+                    self.bluesky_client.altitude_command(callsign, traffic['altitude_ft'])
+                    self.bluesky_client.set_speed(callsign, traffic['speed_kt'])
+                    
                     self.active_aircraft[traffic['callsign']] = {
                         'callsign': traffic['callsign'],
                         'type': 'traffic',
@@ -213,6 +229,12 @@ class CDRPipeline:
             # Initialize conflict detection systems
             self._setup_conflict_detection()
             
+            # Start the simulation (critical for aircraft movement)
+            if not self.bluesky_client.op():
+                self.logger.warning("Failed to start simulation with OP command")
+            else:
+                self.logger.info("✅ Simulation started - aircraft should now be moving")
+
             self.logger.info(f"Initialized simulation with {len(self.active_aircraft)} aircraft")
             self.logger.info(f"Pending intruders: {len(self.pending_intruders)}")
             
@@ -229,8 +251,14 @@ class CDRPipeline:
         max_cycles = int(self.config.max_simulation_time_minutes * 60 / self.config.cycle_interval_seconds)
         
         while cycle_count < max_cycles:
-            # Advance simulation time
+            # Advance simulation time both locally and in BlueSky
             self.current_time += self.config.cycle_interval_seconds
+            
+            # Use direct simulation stepping for reliable kinematics
+            if cycle_count > 0:  # Skip first cycle to avoid double advancement
+                step_success = self.bluesky_client.step_minutes(self.config.cycle_interval_seconds / 60.0)
+                if not step_success:
+                    self.logger.warning(f"Failed to advance BlueSky simulation time by {self.config.cycle_interval_seconds}s")
             
             # Inject pending intruders if scheduled
             self._inject_pending_intruders()
@@ -238,12 +266,24 @@ class CDRPipeline:
             # Get current aircraft states from BlueSky
             current_states = self.bluesky_client.get_aircraft_states()
             
+            # Debug logging to verify aircraft motion
+            for callsign, state in current_states.items():
+                self.logger.debug(f"POS {callsign}: lat={state.latitude:.4f}, lon={state.longitude:.4f}, GS={state.speed_kt:.1f} kt")
+            
+            # Update aircraft states for destination checking
+            self.aircraft_states.update(current_states)
+            
             # Process conflicts with real detection and resolution
             conflicts_resolved = self._process_conflicts(current_states, output_dir)
             
             # Save trajectory data if enabled
             if self.config.save_trajectories:
                 self._save_trajectory_snapshot(current_states, output_dir)
+            
+            # Check if test should be completed (aircraft reached destination)
+            if self._complete_test_if_destination_reached():
+                self.logger.info("✅ Test completed: Aircraft reached destination")
+                break
             
             # Check termination conditions
             if self._should_terminate(current_states):
@@ -277,23 +317,38 @@ class CDRPipeline:
         conflicts_resolved = 0
         
         try:
-            # Step 1: Multi-layer conflict detection
-            all_conflicts = self._detect_conflicts_multilayer(current_states)
+            # CRITICAL FIX: Pause simulation BEFORE conflict detection to ensure stable aircraft states
+            # This prevents stale state issues when querying aircraft positions for conflict detection and LLM input
+            print("⏸️  HOLDING simulation for conflict detection and LLM processing...")
+            hold_success = self.bluesky_client._send_command("HOLD", expect_response=False)
+            if hold_success is False:
+                print("⚠️  Failed to hold simulation, proceeding anyway")
+            
+            # Step 1: Get stable aircraft states while simulation is paused
+            stable_states = self.bluesky_client.get_aircraft_states()
+            
+            # Step 2: Multi-layer conflict detection using stable states
+            all_conflicts = self._detect_conflicts_multilayer(stable_states)
             
             if not all_conflicts:
+                # Resume simulation if no conflicts found
+                print("▶️  Resuming simulation - no conflicts detected...")
+                op_success = self.bluesky_client._send_command("OP", expect_response=False)
+                if op_success is False:
+                    print("⚠️  Failed to resume simulation")
                 return 0
             
             self.logger.info(f"Detected {len(all_conflicts)} conflicts at time {self.current_time/60:.1f} min")
             
-            # Step 2: Prioritize conflicts by urgency and severity
+            # Step 3: Prioritize conflicts by urgency and severity
             prioritized_conflicts = self._prioritize_conflicts(all_conflicts)
             
-            # Step 3: Process each conflict with appropriate resolution strategy
+            # Step 4: Process each conflict with appropriate resolution strategy
             for conflict in prioritized_conflicts:
                 try:
                     # Record baseline methods for ground truth (no commands issued)
                     if self.config.resolution_policy.use_geometric_baseline:
-                        self._record_geometric_baseline(conflict, current_states)
+                        self._record_geometric_baseline(conflict, stable_states)
                     
                     if self.config.resolution_policy.apply_ssd_resolution:
                         self._record_ssd_baseline(conflict)
@@ -301,7 +356,8 @@ class CDRPipeline:
                     # Only LLM generates actual resolutions if enabled
                     resolution = None
                     if self.config.resolution_policy.use_llm:
-                        resolution = self._generate_conflict_resolution(conflict, current_states)
+                        # Use stable aircraft states for accurate LLM input
+                        resolution = self._generate_conflict_resolution(conflict, stable_states)
                     
                     if not resolution:
                         self.logger.warning(f"No resolution generated for conflict {conflict.get('conflict_id')}")
@@ -316,21 +372,61 @@ class CDRPipeline:
                     if self._apply_resolution_to_bluesky(resolution):
                         conflicts_resolved += 1
                         
+                        # Mark conflict as resolved
+                        conflict['resolved'] = True
+                        conflict['resolution_applied_at'] = self.current_time
+                        
                         # Record successful resolution
                         self._record_resolution_success(conflict, resolution)
+                        
+                        # Save resolution data to file
+                        resolution_with_metadata = resolution.copy()
+                        resolution_with_metadata.update({
+                            'conflict_id': conflict['conflict_id'],
+                            'success': True,
+                            'applied_at': self.current_time
+                        })
+                        self._save_resolution_data(resolution_with_metadata, output_dir)
                         
                         # Monitor resolution effectiveness
                         self._schedule_resolution_monitoring(conflict, resolution)
                         
                         self.logger.info(f"Successfully resolved conflict {conflict.get('conflict_id')}")
                     else:
+                        # Save failed resolution data
+                        resolution_with_metadata = resolution.copy()
+                        resolution_with_metadata.update({
+                            'conflict_id': conflict['conflict_id'],
+                            'success': False,
+                            'applied_at': self.current_time,
+                            'failure_reason': 'BlueSky application failed'
+                        })
+                        self._save_resolution_data(resolution_with_metadata, output_dir)
+                        
                         self.logger.error(f"Failed to apply resolution for conflict {conflict.get('conflict_id')}")
                         
                 except Exception as e:
                     self.logger.error(f"Error processing conflict {conflict.get('conflict_id', 'unknown')}: {e}")
                     continue
             
-            # Step 4: Update conflict history and memory
+            # CRITICAL FIX: Resume simulation after all resolutions are applied
+            # This allows BlueSky to process the commands and update aircraft states
+            print("▶️  Resuming simulation after LLM resolutions...")
+            
+            # Check for aircraft that should resume to destination
+            for callsign in list(self.resume_tasks.keys()):
+                self._maybe_resume_to_destination(callsign, stable_states)
+            
+            op_success = self.bluesky_client._send_command("OP", expect_response=False)
+            if op_success is False:
+                print("⚠️  Failed to resume simulation")
+            
+            # Allow multiple simulation cycles for BlueSky to process the heading commands
+            # BlueSky needs sufficient time to update aircraft states after OP
+            import time
+            time.sleep(1.0)  # 1000ms = several simulation cycles at 8x speed to ensure state propagation
+            
+            # Step 5: Update conflict history and memory
             self._update_conflict_history(all_conflicts, conflicts_resolved)
             
             # Step 5: Save conflict data for analysis
@@ -787,7 +883,8 @@ class CDRPipeline:
                         'vertical_ft': self.config.separation_min_ft
                     }
                 },
-                nearby_traffic=nearby_traffic
+                nearby_traffic=nearby_traffic,
+                destination=self._get_aircraft_destination(a)  # Add destination information
             )
             
             return context
@@ -796,12 +893,88 @@ class CDRPipeline:
             self.logger.error(f"Error preparing conflict context: {e}")
             raise
     
+    def _get_aircraft_destination(self, callsign: str) -> Optional[Dict[str, Any]]:
+        """Get destination information for aircraft"""
+        try:
+            # In a real implementation, this would query the aircraft's flight plan
+            # For now, we'll create a placeholder destination
+            # You could extend this to:
+            # 1. Parse flight plan from BlueSky
+            # 2. Look up destination from scenario file
+            # 3. Use predefined waypoints
+            
+            # Placeholder implementation - in production, would extract from flight plan
+            # Using Chicago O'Hare as a more realistic destination for testing
+            return {
+                "name": "DST",
+                "lat": 41.9742,  # Chicago O'Hare coordinates
+                "lon": -87.9073
+            }
+            
+        except Exception as e:
+            self.logger.warning(f"Could not get destination for {callsign}: {e}")
+            return None
+
+    def _check_destination_reached(self, callsign: str, threshold_nm: float = 5.0) -> bool:
+        """Check if aircraft has reached its destination"""
+        try:
+            # Get current aircraft position
+            aircraft_state = self.bluesky_client.get_aircraft_state(callsign)
+            if not aircraft_state:
+                return False
+            
+            # Get destination
+            destination = self._get_aircraft_destination(callsign)
+            if not destination:
+                return False
+            
+            # Calculate distance to destination
+            import math
+            current_lat = aircraft_state.get('latitude', 0)
+            current_lon = aircraft_state.get('longitude', 0)
+            dest_lat = destination['lat']
+            dest_lon = destination['lon']
+            
+            # Simple distance calculation in nautical miles
+            dlat = dest_lat - current_lat
+            dlon = dest_lon - current_lon
+            distance_nm = math.sqrt(dlat**2 + dlon**2) * 60  # Rough conversion
+            
+            if distance_nm <= threshold_nm:
+                self.logger.info(f"🎯 {callsign} has reached destination {destination['name']} "
+                               f"(distance: {distance_nm:.2f} NM)")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Could not check destination for {callsign}: {e}")
+            return False
+
+    def _complete_test_if_destination_reached(self) -> bool:
+        """Check if test should be completed because aircraft reached destination"""
+        try:
+            # Check each tracked aircraft
+            for callsign in self.aircraft_states:
+                if self._check_destination_reached(callsign):
+                    self.logger.info(f"✅ Test completed: {callsign} reached destination")
+                    return True
+            return False
+            
+        except Exception as e:
+            self.logger.warning(f"Error checking test completion: {e}")
+            return False
+    
     def _generate_llm_resolution(self, context: ConflictContext, conflict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Generate resolution using LLM"""
         try:
             if not self.llm_client:
                 return None
-            
+
+            # Check if combined mode is enabled
+            if hasattr(self.llm_client.config, 'enable_combined_mode') and self.llm_client.config.enable_combined_mode:
+                return self._generate_combined_llm_resolution(context, conflict)
+
             # Prepare conflict with expected field names for LLM
             conflict_with_intruder = {
                 **conflict,
@@ -837,6 +1010,84 @@ class CDRPipeline:
         except Exception as e:
             self.logger.error(f"Error in LLM resolution generation: {e}")
             return None
+
+    def _generate_combined_llm_resolution(self, context: ConflictContext, conflict: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Generate resolution using combined LLM method (single call for detection + resolution)"""
+        try:
+            if not self.llm_client:
+                return None
+            
+            # Use the combined detect_and_resolve method
+            conflict_id = conflict['conflict_id']
+            combined_response = self.llm_client.detect_and_resolve(context, conflict_id)
+            
+            if not combined_response:
+                self.logger.warning(f"Combined LLM response failed for conflict {conflict_id}")
+                return None
+            
+            # Check if conflicts were detected
+            if not combined_response.get('conflicts_detected', False):
+                self.logger.debug(f"No conflicts detected by combined LLM for {conflict_id}")
+                return {
+                    'aircraft_callsign': context.ownship_callsign,
+                    'resolution_type': 'no_action',
+                    'parameters': {},
+                    'reasoning': 'No conflicts detected by LLM',
+                    'confidence': combined_response.get('resolution', {}).get('confidence', 0.5),
+                    'source': 'llm_combined',
+                    'timestamp': self.current_time
+                }
+            
+            # Extract resolution from combined response
+            resolution = combined_response.get('resolution', {})
+            if not resolution:
+                self.logger.warning(f"No resolution in combined response for {conflict_id}")
+                return None
+            
+            # Convert LLM parameter format to BlueSky format
+            parameters = resolution.get('parameters', {})
+            converted_params = {}
+            
+            # Map LLM parameter names to BlueSky expected names
+            if 'new_heading_deg' in parameters:
+                converted_params['new_heading'] = parameters['new_heading_deg']
+            if 'target_altitude_ft' in parameters:
+                converted_params['new_altitude'] = parameters['target_altitude_ft']
+            if 'target_speed_kt' in parameters:
+                converted_params['new_speed'] = parameters['target_speed_kt']
+            
+            # Handle route-aware parameters
+            if 'waypoint_name' in parameters:
+                converted_params['waypoint_name'] = parameters['waypoint_name']
+                if 'lat' in parameters:
+                    converted_params['lat'] = parameters['lat']
+                if 'lon' in parameters:
+                    converted_params['lon'] = parameters['lon']
+            
+            if 'via_waypoint' in parameters:
+                converted_params['via_waypoint'] = parameters['via_waypoint']
+                converted_params['resume_to_destination'] = parameters.get('resume_to_destination', True)
+            
+            # Convert to standard format
+            result = {
+                'aircraft_callsign': context.ownship_callsign,
+                'resolution_type': resolution.get('resolution_type', 'no_action'),
+                'reasoning': resolution.get('reasoning', 'Combined LLM resolution'),
+                'confidence': resolution.get('confidence', 0.5),
+                'source': 'llm_combined',
+                'timestamp': self.current_time,
+                'combined_response': combined_response,  # Keep full response for debugging
+                'parameters': parameters  # Add the original parameters for route-aware processing
+            }
+            
+            # Add converted parameters to result
+            result.update(converted_params)
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error in combined LLM resolution generation: {e}")
+            return None
     
     def _generate_geometric_resolution(self, conflict: Dict[str, Any], current_states: Dict[str, Any]) -> Dict[str, Any]:
         """Generate resolution using geometric algorithms"""
@@ -865,8 +1116,10 @@ class CDRPipeline:
         """Apply resolution commands to BlueSky simulation"""
         try:
             aircraft_callsign = resolution['aircraft_callsign']
+            resolution_type = resolution.get('resolution_type', '')
+            parameters = resolution.get('parameters', {})
             
-            # Apply heading change
+            # Handle traditional resolution types
             if 'new_heading' in resolution:
                 success = self.bluesky_client.heading_command(
                     aircraft_callsign, resolution['new_heading']
@@ -875,7 +1128,6 @@ class CDRPipeline:
                     return False
                 self.logger.info(f"Applied heading {resolution['new_heading']}° to {aircraft_callsign}")
             
-            # Apply altitude change
             if 'new_altitude' in resolution:
                 success = self.bluesky_client.altitude_command(
                     aircraft_callsign, resolution['new_altitude']
@@ -884,7 +1136,6 @@ class CDRPipeline:
                     return False
                 self.logger.info(f"Applied altitude {resolution['new_altitude']}ft to {aircraft_callsign}")
             
-            # Apply speed change
             if 'new_speed' in resolution:
                 success = self.bluesky_client.speed_command(
                     aircraft_callsign, resolution['new_speed']
@@ -893,11 +1144,137 @@ class CDRPipeline:
                     return False
                 self.logger.info(f"Applied speed {resolution['new_speed']}kt to {aircraft_callsign}")
             
+            # Handle new route-aware resolution types
+            if resolution_type == "direct_to":
+                waypoint_name = parameters.get('waypoint_name', 'DST')
+                lat = parameters.get('lat')
+                lon = parameters.get('lon')
+                
+                # Add waypoint if coordinates are provided
+                if lat is not None and lon is not None:
+                    self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                
+                # Direct to waypoint
+                success = self.bluesky_client.direct_to(aircraft_callsign, waypoint_name)
+                if not success:
+                    return False
+                self.logger.info(f"Applied direct_to {waypoint_name} for {aircraft_callsign}")
+            
+            elif resolution_type == "reroute_via":
+                via = parameters.get('via_waypoint', {})
+                waypoint_name = via.get('name', 'AVOID1')
+                lat = via.get('lat', 0)
+                lon = via.get('lon', 0)
+                
+                # Debug logging to track coordinate transfer
+                self.logger.debug(f"Reroute via waypoint: {waypoint_name} at {lat:.4f},{lon:.4f}")
+                self.logger.debug(f"Via waypoint structure: {via}")
+                
+                # Add via waypoint
+                self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                
+                # Direct to via waypoint
+                success = self.bluesky_client.direct_to(aircraft_callsign, waypoint_name)
+                if not success:
+                    return False
+                
+                # Schedule auto-resume to destination
+                if parameters.get('resume_to_destination', True):
+                    self._schedule_resume_to_destination(aircraft_callsign, resolution)
+                
+                self.logger.info(f"Applied reroute_via {waypoint_name} for {aircraft_callsign}")
+            
             return True
             
         except Exception as e:
             self.logger.error(f"Error applying resolution to BlueSky: {e}")
             return False
+    
+    def _schedule_resume_to_destination(self, callsign: str, resolution: Dict[str, Any]):
+        """Schedule auto-resume to final destination for reroute_via resolutions"""
+        try:
+            # Extract destination from resolution context (would be better to pass explicitly)
+            # For now, we'll create a simple destination placeholder
+            destination_name = "DST"  # Default destination
+            
+            # Try to extract destination from aircraft's original flight plan if available
+            aircraft_states = self.bluesky_client.get_aircraft_states()
+            if callsign in aircraft_states:
+                # In a real implementation, you'd extract the final destination from the flight plan
+                # For now, we'll use a placeholder
+                pass
+                
+            self.resume_tasks[callsign] = {
+                "dest_name": destination_name,
+                "dest_lat": 0.0,  # Would be extracted from flight plan
+                "dest_lon": 0.0,  # Would be extracted from flight plan
+                "armed": True,
+                "scheduled_at": self.current_time,
+                "timeout_minutes": 8.0  # Auto-resume after 8 minutes if conditions not met
+            }
+            
+            self.logger.info(f"Scheduled resume-to-destination for {callsign}")
+            
+        except Exception as e:
+            self.logger.error(f"Error scheduling resume task for {callsign}: {e}")
+    
+    def _maybe_resume_to_destination(self, callsign: str, aircraft_states: Dict[str, Any]):
+        """Check if aircraft should resume to destination"""
+        task = self.resume_tasks.get(callsign)
+        if not task or not task["armed"]:
+            return
+        
+        try:
+            # Condition A: Near the via waypoint (within 2 NM)
+            near_via = self._near_current_direct_target(callsign, aircraft_states, radius_nm=2.0)
+            
+            # Condition B: Clear of conflicts for multiple cycles
+            clear_for_cycles = self._ownship_clear_for_n_cycles(callsign, n=2, sep_nm=7.0)
+            
+            # Condition C: Timeout reached
+            elapsed_minutes = (self.current_time - task["scheduled_at"]) / 60.0
+            timeout_reached = elapsed_minutes >= task["timeout_minutes"]
+            
+            if near_via or clear_for_cycles or timeout_reached:
+                # Resume to final destination
+                dest_name = task["dest_name"]
+                dest_lat = task["dest_lat"]
+                dest_lon = task["dest_lon"]
+                
+                # Add final destination waypoint if coordinates available
+                if dest_lat != 0.0 or dest_lon != 0.0:
+                    self.bluesky_client.add_waypoint(callsign, dest_name, dest_lat, dest_lon)
+                
+                # Direct to destination
+                success = self.bluesky_client.direct_to(callsign, dest_name)
+                
+                if success:
+                    task["armed"] = False
+                    reason = "near waypoint" if near_via else "clear of conflicts" if clear_for_cycles else "timeout"
+                    self.logger.info(f"Resumed {callsign} to destination {dest_name} ({reason})")
+                else:
+                    self.logger.warning(f"Failed to resume {callsign} to destination")
+                    
+        except Exception as e:
+            self.logger.error(f"Error in resume-to-destination for {callsign}: {e}")
+    
+    def _near_current_direct_target(self, callsign: str, aircraft_states: Dict[str, Any], radius_nm: float = 2.0) -> bool:
+        """Check if aircraft is near its current direct-to target"""
+        # Simplified implementation - in real scenario, would query BlueSky for current flight plan
+        # For now, assume aircraft is near waypoint if it has been flying for some time
+        return False  # Placeholder implementation
+    
+    def _ownship_clear_for_n_cycles(self, callsign: str, n: int = 2, sep_nm: float = 7.0) -> bool:
+        """Check if ownship has been clear of conflicts for N cycles"""
+        # Check recent conflict history for this aircraft
+        recent_conflicts = [
+            c for c in self.conflict_history[-10:]  # Last 10 conflicts
+            if (c.get('aircraft1') == callsign or c.get('aircraft2') == callsign) and
+               (self.current_time - c.get('timestamp', 0)) < (n * self.config.cycle_interval_seconds)
+        ]
+        
+        # Consider clear if no recent conflicts
+        return len(recent_conflicts) == 0
     
     def _record_resolution_success(self, conflict: Dict[str, Any], resolution: Dict[str, Any]):
         """Record successful resolution for learning"""
@@ -998,6 +1375,32 @@ class CDRPipeline:
         except Exception as e:
             self.logger.warning(f"Failed to save conflict data: {e}")
     
+    def _save_resolution_data(self, resolution: Dict[str, Any], output_dir: Path):
+        """Save resolution data for post-analysis"""
+        try:
+            resolution_file = output_dir / "resolutions.jsonl"
+            
+            # Create resolution snapshot
+            resolution_snapshot = {
+                'timestamp': self.current_time,
+                'time_minutes': self.current_time / 60.0,
+                'conflict_id': resolution.get('conflict_id', 'unknown'),
+                'aircraft_callsign': resolution.get('aircraft_callsign', 'unknown'),
+                'resolution_type': resolution.get('resolution_type', 'unknown'),
+                'parameters': resolution.get('parameters', {}),
+                'reasoning': resolution.get('reasoning', ''),
+                'confidence': resolution.get('confidence', 0.0),
+                'method': resolution.get('method', 'LLM'),
+                'success': resolution.get('success', False),
+                'applied_at': resolution.get('applied_at', self.current_time)
+            }
+            
+            with open(resolution_file, 'a') as f:
+                f.write(json.dumps(resolution_snapshot) + '\n')
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to save resolution data: {e}")
+
     
     def _inject_single_intruder(self, intruder: Dict[str, Any], current_time_minutes: float) -> bool:
         """Inject a single intruder aircraft into the simulation"""
@@ -1016,6 +1419,12 @@ class CDRPipeline:
             )
             
             if success:
+                # Arm the intruder aircraft with proper autopilot settings for movement
+                callsign = intruder['callsign']
+                self.bluesky_client.heading_command(callsign, spawn_position['heading_deg'])
+                self.bluesky_client.altitude_command(callsign, spawn_position['altitude_ft'])
+                self.bluesky_client.set_speed(callsign, spawn_position['speed_kt'])
+                
                 self.active_aircraft[intruder['callsign']] = {
                     'callsign': intruder['callsign'],
                     'type': 'intruder',

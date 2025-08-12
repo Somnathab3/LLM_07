@@ -354,5 +354,826 @@
       "version": "1.0",
       "created_by": "LLM_ATC7"
     }
+  },
+  {
+    "record_id": "resolution_20250812_003823_0723",
+    "timestamp": "2025-08-12T00:38:23.962089",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754951903.962089
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 1.0,
+          "timestamp": 1754951903.962089
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "parameters": {
+        "new_heading_deg": 9.0
+      },
+      "reasoning": "Fallback resolution: 20-degree right turn",
+      "confidence": 0.3,
+      "source": "llm",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_005733_8988",
+    "timestamp": "2025-08-12T00:57:53.929729",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754953053.5563195
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 8.0,
+          "altitude_ft": 8.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 1.0,
+          "timestamp": 1754953053.5563195
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "no_action",
+      "parameters": {},
+      "reasoning": "No conflicts detected by LLM",
+      "confidence": 0.0,
+      "source": "llm_combined",
+      "timestamp": 300.0
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_010651_9085",
+    "timestamp": "2025-08-12T01:14:23.553185",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 1.0,
+        "speed_kt": 1.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754953611.5220697
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 1.0,
+          "altitude_ft": 1.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 8.0,
+          "timestamp": 1754953611.5220697
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 0.5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "heading_change",
+          "parameters": {
+            "new_heading_deg": 38
+          },
+          "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+          "confidence": 0.8
+        }
+      },
+      "new_heading": 38
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 8.0,
+      "altitude_separation": 7.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_012016_5164",
+    "timestamp": "2025-08-12T01:24:29.831730",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 1.0,
+        "speed_kt": 1.0,
+        "vertical_speed_fpm": 8.0,
+        "timestamp": 1754954416.842399
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 1.0,
+          "altitude_ft": 1.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 8.0,
+          "timestamp": 1754954416.842399
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 0.5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "heading_change",
+          "parameters": {
+            "new_heading_deg": 38
+          },
+          "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+          "confidence": 0.8
+        }
+      },
+      "new_heading": 38
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 8.0,
+      "altitude_separation": 7.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_013129_6667",
+    "timestamp": "2025-08-12T01:31:29.372744",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 1.0,
+        "speed_kt": 1.0,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754955089.3727446
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 1.0,
+          "altitude_ft": 1.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754955089.3727446
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 0.5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "heading_change",
+          "parameters": {
+            "new_heading_deg": 38
+          },
+          "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+          "confidence": 0.8
+        }
+      },
+      "new_heading": 38
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 8.0,
+      "altitude_separation": 7.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_014912_5965",
+    "timestamp": "2025-08-12T01:53:54.147030",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 8.0,
+        "longitude": 8.0,
+        "altitude": 8.0,
+        "altitude_ft": 8.0,
+        "heading": 8.0,
+        "heading_deg": 8.0,
+        "speed": 8.0,
+        "speed_kt": 8.0,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754956152.8192623
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 8.0,
+          "longitude": 8.0,
+          "altitude": 1.0,
+          "altitude_ft": 1.0,
+          "heading": 8.0,
+          "heading_deg": 8.0,
+          "speed": 8.0,
+          "speed_kt": 8.0,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754956152.8192623
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 0.5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "heading_change",
+          "parameters": {
+            "new_heading_deg": 38
+          },
+          "reasoning": "To avoid crossing conflict, turn \u00b130\u00b0.",
+          "confidence": 0.8
+        }
+      },
+      "new_heading": 38
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 0.0,
+      "speed_ratio": 1.0,
+      "altitude_separation": 7.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "head_on",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_020042_4852",
+    "timestamp": "2025-08-12T02:01:48.173991",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 41.978,
+        "longitude": -87.904,
+        "altitude": 37000.0,
+        "altitude_ft": 37000.0,
+        "heading": 300.0,
+        "heading_deg": 300.0,
+        "speed": 450.0,
+        "speed_kt": 450.0,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754956842.5029533
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 42.0,
+          "longitude": -87.9,
+          "altitude": 37000.0,
+          "altitude_ft": 37000.0,
+          "heading": 90.0,
+          "heading_deg": 90.0,
+          "speed": 420.0,
+          "speed_kt": 420.0,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754956842.5029533
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "heading_change",
+      "reasoning": "To avoid crossing conflict, turn to 300\u00b0.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 5.0,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "heading_change",
+          "parameters": {
+            "new_heading_deg": 300
+          },
+          "reasoning": "To avoid crossing conflict, turn to 300\u00b0.",
+          "confidence": 0.8
+        }
+      },
+      "new_heading": 300
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 150.0,
+      "speed_ratio": 0.9333333333333333,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "vertical",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_031721_4378",
+    "timestamp": "2025-08-12T03:18:40.903249",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 41.978,
+        "longitude": -87.904,
+        "altitude": 37000.0,
+        "altitude_ft": 37000.0,
+        "heading": 270.0,
+        "heading_deg": 270.0,
+        "speed": 450.0,
+        "speed_kt": 450.0,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754961441.2855568
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 42.0,
+          "longitude": -87.9,
+          "altitude": 37000.0,
+          "altitude_ft": 37000.0,
+          "heading": 90.0,
+          "heading_deg": 90.0,
+          "speed": 420.0,
+          "speed_kt": 420.0,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754961441.2855568
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "reroute_via",
+      "reasoning": "To avoid vertical conflict, propose dogleg around traffic via temporary waypoint.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "reroute_via",
+          "parameters": {
+            "via_waypoint": {
+              "name": "AVOID1",
+              "lat": 42.32,
+              "lon": -87.35
+            },
+            "resume_to_destination": true
+          },
+          "reasoning": "To avoid vertical conflict, propose dogleg around traffic via temporary waypoint.",
+          "confidence": 0.8
+        }
+      }
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 180.0,
+      "speed_ratio": 0.9333333333333333,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "overtaking",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
+  },
+  {
+    "record_id": "resolution_20250812_032649_1669",
+    "timestamp": "2025-08-12T03:32:49.676375",
+    "conflict_context": {
+      "ownship_callsign": "OWNSHIP",
+      "ownship_state": {
+        "callsign": "OWNSHIP",
+        "latitude": 41.978,
+        "longitude": -87.904,
+        "altitude": 37000.0,
+        "altitude_ft": 37000.0,
+        "heading": 270.0,
+        "heading_deg": 270.0,
+        "speed": 450.0,
+        "speed_kt": 450.0,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754962009.6891203
+      },
+      "intruders": [
+        {
+          "callsign": "INTRUDER1",
+          "latitude": 42.0,
+          "longitude": -87.9,
+          "altitude": 37000.0,
+          "altitude_ft": 37000.0,
+          "heading": 90.0,
+          "heading_deg": 90.0,
+          "speed": 420.0,
+          "speed_kt": 420.0,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754962009.6891203
+        }
+      ],
+      "scenario_time": 300.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "OWNSHIP",
+      "resolution_type": "reroute_via",
+      "reasoning": "To avoid vertical conflict, reroute via temporary waypoint and resume to destination.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 300.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_OWNSHIP_INTRUDER1_300",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "INTRUDER1",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "reroute_via",
+          "parameters": {
+            "via_waypoint": {
+              "name": "AVOID1",
+              "lat": 42.32,
+              "lon": -87.35
+            },
+            "resume_to_destination": true
+          },
+          "reasoning": "To avoid vertical conflict, reroute via temporary waypoint and resume to destination.",
+          "confidence": 0.8
+        }
+      }
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 180.0,
+      "speed_ratio": 0.9333333333333333,
+      "altitude_separation": 0.0,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "overtaking",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
   }
 ]
