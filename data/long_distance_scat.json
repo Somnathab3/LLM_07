@@ -1,0 +1,174 @@
+{
+    "centre_ctrl": [
+        {
+            "centre_id": 1,
+            "start_time": "2025-08-12T12:00:00.000000"
+        }
+    ],
+    "fpl": {
+        "fpl_arr": [
+            {
+                "approach_clearance": false,
+                "arrival_runway": null,
+                "ata": null,
+                "missed_approach_flag": false,
+                "star": null,
+                "time_stamp": "2025-08-12T11:00:00.000000"
+            }
+        ],
+        "fpl_base": [
+            {
+                "adar": null,
+                "adep": "KJFK",
+                "ades": "EGLL", 
+                "aircraft_type": "B777",
+                "callsign": "UAL15",
+                "equip_status_rvsm": true,
+                "flight_rules": "I",
+                "time_stamp": "2025-08-12T11:00:00.000000",
+                "wtc": "H"
+            }
+        ],
+        "fpl_clearance": [
+            {
+                "assign_heading_beacon": null,
+                "assigned_heading_val": null,
+                "assigned_speed_unit": null,
+                "assigned_speed_val": null,
+                "cfl": 410,
+                "cfl_unit": "F",
+                "time_stamp": "2025-08-12T11:00:00.000000"
+            }
+        ],
+        "fpl_route": [
+            {
+                "icao_route": "HAPIE6 HAPIE J121 CANAN J584 MASSA J121 PENNS J595 KJOHN DCT ALLRY DCT TUDEP DCT BURAK DCT NIBOG DCT RATSU DCT GAPLI DCT GOMUP N14A RESNO DCT DIKAS DCT NEVRI UL9 KONAN",
+                "route_distance": 3420.5,
+                "time_stamp": "2025-08-12T11:00:00.000000"
+            }
+        ]
+    },
+    "flight": [
+        {
+            "aircraft_address": "A12345",
+            "aircraft_identification": "UAL15",
+            "aircraft_type": "B777",
+            "callsign": "UAL15", 
+            "dep_airport": "KJFK",
+            "dest_airport": "EGLL",
+            "flight_plan_id": "FP001",
+            "time_stamp": "2025-08-12T11:00:00.000000"
+        }
+    ],
+    "cat021": [
+        {
+            "aircraft_address": "A12345",
+            "barometric_altitude": 1000.0,
+            "callsign": "UAL15",
+            "ground_speed": 180.0,
+            "latitude": 40.6413,
+            "longitude": -73.7781,
+            "magnetic_heading": 75.0,
+            "time_stamp": "2025-08-12T12:00:00.000000",
+            "track_angle": 75.0,
+            "vertical_rate": 2500.0
+        }
+    ],
+    "scenario_config": {
+        "ownship": {
+            "callsign": "UAL15",
+            "aircraft_type": "B777",
+            "latitude": 40.6413,
+            "longitude": -73.7781,
+            "altitude_ft": 1000.0,
+            "heading_deg": 75.0,
+            "speed_kt": 180.0,
+            "destination": {
+                "lat": 51.4700,
+                "lon": -0.4543,
+                "name": "EGLL"
+            },
+            "route": [
+                {"lat": 40.6413, "lon": -73.7781, "name": "KJFK"},
+                {"lat": 40.7831, "lon": -73.8065, "name": "HAPIE"},
+                {"lat": 41.2167, "lon": -72.1833, "name": "CANAN"},
+                {"lat": 42.5167, "lon": -69.1833, "name": "MASSA"},
+                {"lat": 44.2833, "lon": -63.7333, "name": "KJOHN"},
+                {"lat": 45.8667, "lon": -60.4333, "name": "ALLRY"},
+                {"lat": 47.4833, "lon": -56.8167, "name": "TUDEP"},
+                {"lat": 49.2833, "lon": -52.7167, "name": "BURAK"},
+                {"lat": 51.2833, "lon": -47.9167, "name": "NIBOG"},
+                {"lat": 53.4833, "lon": -42.3167, "name": "RATSU"},
+                {"lat": 55.8833, "lon": -35.9167, "name": "GAPLI"},
+                {"lat": 57.6833, "lon": -29.2167, "name": "GOMUP"},
+                {"lat": 58.9833, "lon": -21.8167, "name": "RESNO"},
+                {"lat": 59.2833, "lon": -14.1167, "name": "DIKAS"},
+                {"lat": 58.8833, "lon": -6.7167, "name": "NEVRI"},
+                {"lat": 57.6833, "lon": -2.4167, "name": "KONAN"},
+                {"lat": 51.4700, "lon": -0.4543, "name": "EGLL"}
+            ]
+        },
+        "intruders": [
+            {
+                "callsign": "AAL202",
+                "aircraft_type": "A350",
+                "injection_time_minutes": 45.0,
+                "latitude": 42.8,
+                "longitude": -67.5,
+                "altitude_ft": 41000.0,
+                "heading_deg": 85.0,
+                "speed_kt": 480.0,
+                "conflict_time_minutes": 48.0,
+                "description": "Crossing traffic from Boston area"
+            },
+            {
+                "callsign": "DAL128",
+                "aircraft_type": "B737",
+                "injection_time_minutes": 90.0,
+                "latitude": 45.2,
+                "longitude": -58.8,
+                "altitude_ft": 39000.0,
+                "heading_deg": 45.0,
+                "speed_kt": 450.0,
+                "conflict_time_minutes": 95.0,
+                "description": "Atlantic crossing conflict near Newfoundland"
+            },
+            {
+                "callsign": "BAW256",
+                "aircraft_type": "A380",
+                "injection_time_minutes": 180.0,
+                "latitude": 56.8,
+                "longitude": -32.1,
+                "altitude_ft": 41000.0,
+                "heading_deg": 135.0,
+                "speed_kt": 490.0,
+                "conflict_time_minutes": 185.0,
+                "description": "Mid-Atlantic opposing traffic"
+            },
+            {
+                "callsign": "AFR447",
+                "aircraft_type": "A330",
+                "injection_time_minutes": 280.0,
+                "latitude": 58.2,
+                "longitude": -18.5,
+                "altitude_ft": 39000.0,
+                "heading_deg": 225.0,
+                "speed_kt": 460.0,
+                "conflict_time_minutes": 285.0,
+                "description": "European airspace convergence near Iceland"
+            },
+            {
+                "callsign": "LHR123",
+                "aircraft_type": "B787",
+                "injection_time_minutes": 350.0,
+                "latitude": 53.8,
+                "longitude": -8.2,
+                "altitude_ft": 37000.0,
+                "heading_deg": 90.0,
+                "speed_kt": 430.0,
+                "conflict_time_minutes": 365.0,
+                "description": "UK approach conflict near Irish Sea"
+            }
+        ]
+    }
+}

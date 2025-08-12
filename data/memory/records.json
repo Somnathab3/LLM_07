@@ -1175,5 +1175,118 @@
       "version": "1.0",
       "created_by": "LLM_ATC7"
     }
+  },
+  {
+    "record_id": "resolution_20250812_110402_0375",
+    "timestamp": "2025-08-12T11:04:29.379492",
+    "conflict_context": {
+      "ownship_callsign": "AAL202",
+      "ownship_state": {
+        "callsign": "AAL202",
+        "latitude": 45.19313252961514,
+        "longitude": -29.468159947673048,
+        "altitude": 11290.0,
+        "altitude_ft": 11290.0,
+        "heading": 85.0,
+        "heading_deg": 85.0,
+        "speed": 256.7104593528922,
+        "speed_kt": 256.7104593528922,
+        "vertical_speed_fpm": 0.0,
+        "timestamp": 1754989442.3651414
+      },
+      "intruders": [
+        {
+          "callsign": "DAL128",
+          "latitude": 50.894071803832986,
+          "longitude": -50.27016066932273,
+          "altitude": 11887.2,
+          "altitude_ft": 11887.2,
+          "heading": 45.0,
+          "heading_deg": 45.0,
+          "speed": 236.0555948072572,
+          "speed_kt": 236.0555948072572,
+          "vertical_speed_fpm": 0.0,
+          "timestamp": 1754989442.3651414
+        }
+      ],
+      "scenario_time": 6600.0,
+      "lookahead_minutes": 10.0,
+      "constraints": {
+        "max_heading_change": 45.0,
+        "max_altitude_change": 2000.0,
+        "separation_minima": {
+          "horizontal_nm": 5.0,
+          "vertical_ft": 1000.0
+        }
+      },
+      "nearby_traffic": []
+    },
+    "resolution_taken": {
+      "aircraft_callsign": "AAL202",
+      "resolution_type": "reroute_via",
+      "reasoning": "Rerouting to avoid conflict with DAL128 at FL118.",
+      "confidence": 0.8,
+      "source": "llm_combined",
+      "timestamp": 6600.0,
+      "combined_response": {
+        "schema_version": "cdr.v1",
+        "conflict_id": "BS_AAL202_DAL128_6600",
+        "conflicts_detected": true,
+        "conflicts": [
+          {
+            "intruder_callsign": "DAL128",
+            "time_to_conflict_minutes": 10,
+            "predicted_min_separation_nm": 5,
+            "predicted_min_vertical_separation_ft": 1000,
+            "conflict_type": "crossing"
+          }
+        ],
+        "resolution": {
+          "resolution_type": "reroute_via",
+          "parameters": {
+            "via_waypoint": {
+              "name": "AVOID1",
+              "lat": 42.32,
+              "lon": -87.35
+            },
+            "resume_to_destination": true
+          },
+          "reasoning": "Rerouting to avoid conflict with DAL128 at FL118.",
+          "confidence": 0.8
+        }
+      },
+      "parameters": {
+        "via_waypoint": {
+          "name": "AVOID1",
+          "lat": 42.32,
+          "lon": -87.35
+        },
+        "resume_to_destination": true
+      },
+      "via_waypoint": {
+        "name": "AVOID1",
+        "lat": 42.32,
+        "lon": -87.35
+      },
+      "resume_to_destination": true
+    },
+    "outcome_metrics": {
+      "success_rate": 1.0
+    },
+    "scenario_features": {
+      "approach_angle": 40.0,
+      "speed_ratio": 0.9195402298850575,
+      "altitude_separation": 597.2000000000007,
+      "horizontal_separation": 10.0,
+      "time_to_cpa": 5.0,
+      "conflict_type": "vertical",
+      "urgency_level": "medium"
+    },
+    "task_type": "resolution",
+    "success_score": 1.0,
+    "metadata": {
+      "version": "1.0",
+      "created_by": "LLM_ATC7"
+    }
   }
 ]

@@ -20,7 +20,7 @@ class Config:
         if self.simulation is None:
             self.simulation = {
                 'cycle_interval_seconds': 60.0,
-                'lookahead_minutes': 10.0,
+                'lookahead_minutes': 5.0,  # Match BlueSky native asas_dtlookahead=300s
                 'max_simulation_time_minutes': 120.0
             }
         

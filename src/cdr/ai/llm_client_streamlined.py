@@ -1,7 +1,8 @@
-"""Streamlined LLM client for conflict detection and resolution"""
+"""Streamlined LLM client for conflict detection and resolution with enhanced multi-aircraft and destination support"""
 
 import json
 import math
+import random
 import requests
 import time
 from typing import Dict, List, Optional, Any, Tuple
@@ -32,7 +33,7 @@ class ConflictContext:
     ownship_state: Dict[str, Any]
     intruders: List[Dict[str, Any]]
     scenario_time: float
-    lookahead_minutes: float = 5.0  # Match BlueSky native asas_dtlookahead=300s
+    lookahead_minutes: float = 10.0
     constraints: Optional[Dict[str, Any]] = None
     destination: Optional[Dict[str, Any]] = None
 
@@ -81,9 +82,9 @@ COMBINED_CDR_SCHEMA = {
 
 
 class PromptTemplate:
-    """Essential prompt templates for detector and resolver"""
+    """Enhanced prompt templates for multi-aircraft scenarios with fixed destinations"""
     
-    # Combined detection and resolution prompt
+    # Enhanced combined detection and resolution prompt with multi-aircraft support
     COMBINED_CDR_PROMPT = """ATC assistant. Return ONLY complete JSON matching this exact schema:
 
 {{
@@ -116,23 +117,32 @@ class PromptTemplate:
   }}
 }}
 
-CONFLICT DETECTION:
-1. Own: {ownship_callsign} at {ownship_lat:.4f},{ownship_lon:.4f} FL{ownship_fl} hdg={ownship_hdg}° spd={ownship_spd}kt VS={ownship_vs:+d}fpm
-2. Traffic: {intruders_list}
-3. Project straight-line {lookahead_minutes} min. If separation <5NM horizontal OR <1000ft vertical = CONFLICT
-   (Note: BlueSky native uses 5NM/1000ft/5min lookahead - keep parameters aligned)
+CONFLICT DETECTION - MULTI-AIRCRAFT SCENARIO:
+1. OWNSHIP: {ownship_callsign} at {ownship_lat:.4f},{ownship_lon:.4f} FL{ownship_fl} hdg={ownship_hdg}° spd={ownship_spd}kt VS={ownship_vs:+d}fpm
 
-FINAL DESTINATION (must remain the same):
+2. TRAFFIC ({num_intruders} aircraft):
+{intruders_detailed_list}
+
+3. CONFLICT ANALYSIS: Project {lookahead_minutes} min straight-line. If ANY aircraft separation <5NM horizontal OR <1000ft vertical = CONFLICT
+
+FIXED DESTINATION (MUST REMAIN THE SAME):
 - Name: {dest_name}
 - Position: {dest_lat:.4f}, {dest_lon:.4f}
-- Bearing/Distance from ownship: {dest_brg}°, {dest_dist_nm} NM
+- Bearing/Distance from ownship: {dest_brg}°, {dest_dist_nm:.1f} NM
+- CRITICAL: Ownship MUST reach this destination. Any resolution must allow continued progress toward destination.
 
-RESOLUTION RULES:
-- If CONFLICT: set conflicts_detected=true, add conflict details, propose resolution
-- If NO CONFLICT: set conflicts_detected=false, conflicts=[], resolution_type="no_action", parameters={{}}, reasoning="No conflict detected", confidence=0.5
-- ECHO EXACTLY: conflict_id="{conflict_id}", aircraft1="{ownship_callsign}", aircraft2=intruder_callsign
+RESOLUTION PRIORITY:
+1. SAFETY: Resolve conflicts with 5+ NM / 1000+ ft separation
+2. EFFICIENCY: Minimize deviation from direct route to destination
+3. COORDINATION: Consider impact on multiple intruders
+
+RULES:
+- If CONFLICT DETECTED: set conflicts_detected=true, list ALL conflicts, propose resolution for OWNSHIP only
+- If NO CONFLICT: set conflicts_detected=false, conflicts=[], resolution_type="no_action"
+- ECHO EXACTLY: conflict_id="{conflict_id}", aircraft1="{ownship_callsign}"
+- For conflicts, aircraft2=intruder_callsign of PRIMARY conflict (closest/most urgent)
 - Keep reasoning ≤200 characters
-- Include ONLY the parameter fields for your chosen resolution_type
+- Resolution must consider OWNSHIP progress toward {dest_name}
 
 JSON ONLY:"""
     
@@ -147,10 +157,8 @@ CONFLICT SITUATION:
 
 CONSTRAINTS:
 - Lateral separation ≥ 5 NM, Vertical ≥ 1000 ft
-- Maximum heading change: ±15° from current heading (realistic operational limit)
-- Prefer altitude changes for large heading deviations
+- Minimum heading change: ±20°
 - Avoid headings within ±15° of intruder bearing ({relative_bearing}°)
-- (BlueSky native: 5NM/1000ft/5min - ensure consistency)
 
 Return ONLY:
 {{
@@ -166,7 +174,7 @@ Return ONLY:
 
 
 class StreamlinedLLMClient:
-    """Streamlined LLM client with essential functionality only"""
+    """Enhanced LLM client with multi-aircraft and fixed destination support"""
     
     def __init__(self, config: LLMConfig, log_dir: Optional[Path] = None):
         self.config = config
@@ -190,15 +198,7 @@ class StreamlinedLLMClient:
             # Check if Ollama is running
             response = requests.get(f"{self.config.base_url}/api/tags", timeout=5)
             response.raise_for_status()
-            
-            models = response.json().get("models", [])
-            model_names = [model["name"] for model in models]
-            
-            if self.config.model not in model_names:
-                raise ValueError(f"Model {self.config.model} not found. Available: {model_names}")
-                
-            print(f"✅ Ollama connection verified, model {self.config.model} available")
-            
+            print("✅ Ollama connection verified")
         except requests.exceptions.RequestException as e:
             raise ConnectionError(f"Cannot connect to Ollama at {self.config.base_url}: {e}")
     
@@ -254,41 +254,33 @@ class StreamlinedLLMClient:
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse and validate JSON response"""
         try:
-            # Clean the response
-            response = response.strip()
+            # Find JSON in response
+            start_idx = response.find('{')
+            end_idx = response.rfind('}') + 1
             
-            # Try to find JSON in the response
-            if "{" in response and "}" in response:
-                start = response.find("{")
-                end = response.rfind("}") + 1
-                json_str = response[start:end]
-            else:
-                json_str = response
+            if start_idx == -1 or end_idx == 0:
+                raise ValueError("No JSON found in response")
             
-            # Parse JSON
+            json_str = response[start_idx:end_idx]
             parsed = json.loads(json_str)
-            
-            # Basic validation
-            if not isinstance(parsed, dict):
-                raise ValueError("Response is not a JSON object")
             
             return parsed
             
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}\nResponse: {response}")
+            raise ValueError(f"Invalid JSON in response: {e}\nResponse: {response}")
     
     def detect_and_resolve_conflicts(self, context: ConflictContext) -> Dict[str, Any]:
-        """Combined conflict detection and resolution"""
+        """Enhanced conflict detection and resolution with multi-aircraft support"""
         conflict_id = f"CDR_{int(time.time() * 1000)}"
         
         # Prepare context data
         ownship = context.ownship_state
-        intruders_list = self._format_intruders(context.intruders)
+        intruders_detailed = self._format_intruders_detailed(context.intruders, ownship)
         
-        # Destination info
+        # Destination info (fixed throughout scenario)
         dest_info = self._format_destination(context.destination, ownship)
         
-        # Format prompt
+        # Format enhanced prompt with multi-aircraft information
         prompt = PromptTemplate.COMBINED_CDR_PROMPT.format(
             conflict_id=conflict_id,
             ownship_callsign=context.ownship_callsign,
@@ -298,7 +290,8 @@ class StreamlinedLLMClient:
             ownship_hdg=int(ownship.get('heading', 0)),
             ownship_spd=int(ownship.get('speed', 400)),
             ownship_vs=int(ownship.get('vertical_speed_fpm', 0)),
-            intruders_list=intruders_list,
+            num_intruders=len(context.intruders),
+            intruders_detailed_list=intruders_detailed,
             lookahead_minutes=int(context.lookahead_minutes),
             dest_name=dest_info['name'],
             dest_lat=dest_info['lat'],
@@ -362,78 +355,79 @@ class StreamlinedLLMClient:
             time_to_cpa=relative_info['time_to_cpa']
         )
         
-        try:
-            # Call LLM
-            response = self._call_llm(prompt)
-            parsed = self._parse_json_response(response)
-            
-            # Create response object
-            resolution = ResolutionResponse(
-                conflict_id=parsed.get('conflict_id', conflict_id),
-                aircraft1=parsed.get('aircraft1', context.ownship_callsign),
-                aircraft2=parsed.get('aircraft2', intruder_callsign),
-                resolution_type=parsed.get('resolution_type', 'no_action'),
-                parameters=parsed.get('parameters', {}),
-                reasoning=parsed.get('reasoning', 'LLM resolution'),
-                confidence=parsed.get('confidence', 0.5),
-                success=True
-            )
-            
-            # Log interaction
-            self._log_interaction(conflict_id, prompt, response, parsed)
-            
-            return resolution
-            
-        except Exception as e:
-            return ResolutionResponse(
-                conflict_id=conflict_id,
-                aircraft1=context.ownship_callsign,
-                aircraft2=intruder_callsign,
-                resolution_type="no_action",
-                parameters={},
-                reasoning="LLM error",
-                confidence=0.0,
-                success=False,
-                error_message=str(e)
-            )
+        # Call LLM
+        response = self._call_llm(prompt)
+        parsed = self._parse_json_response(response)
+        
+        # Create response object
+        return ResolutionResponse(
+            conflict_id=parsed.get('conflict_id', conflict_id),
+            aircraft1=parsed.get('aircraft1', context.ownship_callsign),
+            aircraft2=parsed.get('aircraft2', intruder_callsign),
+            resolution_type=parsed.get('resolution_type', 'no_action'),
+            parameters=parsed.get('parameters', {}),
+            reasoning=parsed.get('reasoning', ''),
+            confidence=parsed.get('confidence', 0.0)
+        )
     
-    def _format_intruders(self, intruders: List[Dict[str, Any]]) -> str:
-        """Format intruder list for prompt"""
+    def _format_intruders_detailed(self, intruders: List[Dict[str, Any]], ownship: Dict[str, Any]) -> str:
+        """Format intruders with detailed relative information for multi-aircraft scenarios"""
         if not intruders:
-            return "No traffic in range"
+            return "   No traffic in range"
         
         formatted = []
-        for i, intruder in enumerate(intruders[:5]):  # Limit to 5 intruders
+        own_lat = ownship.get('latitude', 42.0)
+        own_lon = ownship.get('longitude', -87.0)
+        
+        for i, intruder in enumerate(intruders[:8]):  # Support up to 8 intruders
             callsign = intruder.get('callsign', f'TFC{i+1}')
-            lat = intruder.get('latitude', 0)
-            lon = intruder.get('longitude', 0)
+            int_lat = intruder.get('latitude', 0)
+            int_lon = intruder.get('longitude', 0)
             alt = int(intruder.get('altitude', 35000))
             hdg = int(intruder.get('heading', 0))
             spd = int(intruder.get('speed', 400))
             vs = int(intruder.get('vertical_speed_fpm', 0))
             
-            formatted.append(f"{callsign} at {lat:.4f},{lon:.4f} FL{alt//100} hdg={hdg}° spd={spd}kt VS={vs:+d}fpm")
+            # Calculate relative information
+            bearing = self._calculate_bearing(own_lat, own_lon, int_lat, int_lon)
+            distance = self._calculate_distance(own_lat, own_lon, int_lat, int_lon)
+            
+            formatted.append(
+                f"   {callsign}: {int_lat:.4f},{int_lon:.4f} FL{alt//100} hdg={hdg}° spd={spd}kt VS={vs:+d}fpm "
+                f"({bearing:.0f}° {distance:.1f}NM from ownship)"
+            )
         
-        return "; ".join(formatted)
+        return "\n".join(formatted)
     
     def _format_destination(self, destination: Optional[Dict[str, Any]], ownship: Dict[str, Any]) -> Dict[str, Any]:
-        """Format destination information"""
+        """Format destination information with fixed destination support from SCAT data"""
         if not destination:
-            # Default destination
+            # Generate a random destination 80-100 NM from ownship starting position
+            own_lat = ownship.get('latitude', 42.0)
+            own_lon = ownship.get('longitude', -87.0)
+            
+            # Random distance between 80-100 NM (as specified for SCAT scenarios)
+            distance_nm = random.uniform(80, 100)
+            bearing_deg = random.uniform(0, 360)
+            
+            # Calculate destination coordinates
+            dest_lat, dest_lon = self._calculate_destination_from_bearing(own_lat, own_lon, distance_nm, bearing_deg)
+            
             return {
-                'name': 'DEST',
-                'lat': ownship.get('latitude', 42.0) + 1.0,
-                'lon': ownship.get('longitude', -87.0) + 1.0,
-                'bearing': 45,
-                'distance_nm': 100
+                'name': f'DEST{random.randint(1000, 9999)}',
+                'lat': dest_lat,
+                'lon': dest_lon,
+                'bearing': int(bearing_deg),
+                'distance_nm': round(distance_nm, 1)
             }
         
-        # Calculate bearing and distance to destination
+        # Use provided destination (fixed throughout scenario)
         own_lat = ownship.get('latitude', 42.0)
         own_lon = ownship.get('longitude', -87.0)
         dest_lat = destination.get('latitude', own_lat + 1.0)
         dest_lon = destination.get('longitude', own_lon + 1.0)
         
+        # Calculate current bearing and distance to fixed destination
         bearing = self._calculate_bearing(own_lat, own_lon, dest_lat, dest_lon)
         distance = self._calculate_distance(own_lat, own_lon, dest_lat, dest_lon)
         
@@ -445,6 +439,83 @@ class StreamlinedLLMClient:
             'distance_nm': round(distance, 1)
         }
     
+    def generate_destination_from_scat_start(self, start_lat: float, start_lon: float,
+                                           current_heading: Optional[float] = None,
+                                           min_distance_nm: float = 80, max_distance_nm: float = 100) -> Dict[str, Any]:
+        """Generate a fixed destination 80-100 NM from SCAT starting position, considering current heading"""
+        # Random distance within range (based on requirements)
+        distance_nm = random.uniform(min_distance_nm, max_distance_nm)
+        
+        if current_heading is not None:
+            # Generate destination in the general direction of current heading (±45° spread)
+            # This makes the destination more realistic as aircraft typically continue in their current direction
+            heading_spread = 45  # degrees - allows some deviation but keeps general direction
+            min_bearing = (current_heading - heading_spread) % 360
+            max_bearing = (current_heading + heading_spread) % 360
+            
+            if min_bearing <= max_bearing:
+                bearing_deg = random.uniform(min_bearing, max_bearing)
+            else:
+                # Handle wrap-around case (e.g., heading 350°, range 305°-35°)
+                if random.random() < 0.5:
+                    bearing_deg = random.uniform(min_bearing, 360)
+                else:
+                    bearing_deg = random.uniform(0, max_bearing)
+            
+            print(f"🧭 Generated destination considering heading {current_heading:.0f}°: bearing {bearing_deg:.0f}°, distance {distance_nm:.1f} NM")
+        else:
+            # Random bearing (0-360 degrees) if no heading provided
+            bearing_deg = random.uniform(0, 360)
+            print(f"🎲 Generated random destination: bearing {bearing_deg:.0f}°, distance {distance_nm:.1f} NM")
+        
+        # Calculate destination coordinates using great circle navigation
+        dest_lat, dest_lon = self._calculate_destination_from_bearing(start_lat, start_lon, distance_nm, bearing_deg)
+        
+        # Generate unique destination name
+        dest_name = f"DEST{random.randint(1000, 9999)}"
+        
+        return {
+            'name': dest_name,
+            'latitude': dest_lat,
+            'longitude': dest_lon,
+            'altitude': 35000,  # Standard cruise altitude
+            'original_bearing': bearing_deg,
+            'original_distance_nm': distance_nm,
+            'based_on_heading': current_heading is not None
+        }
+    
+    def _calculate_destination_from_bearing(self, start_lat: float, start_lon: float, 
+                                          distance_nm: float, bearing_deg: float) -> Tuple[float, float]:
+        """Calculate destination coordinates from start point, distance and bearing using great circle navigation"""
+        # Convert to radians
+        lat1_rad = math.radians(start_lat)
+        lon1_rad = math.radians(start_lon)
+        bearing_rad = math.radians(bearing_deg)
+        
+        # Earth radius in nautical miles
+        earth_radius_nm = 3440.065
+        
+        # Angular distance
+        angular_distance = distance_nm / earth_radius_nm
+        
+        # Calculate destination latitude
+        lat2_rad = math.asin(
+            math.sin(lat1_rad) * math.cos(angular_distance) +
+            math.cos(lat1_rad) * math.sin(angular_distance) * math.cos(bearing_rad)
+        )
+        
+        # Calculate destination longitude
+        lon2_rad = lon1_rad + math.atan2(
+            math.sin(bearing_rad) * math.sin(angular_distance) * math.cos(lat1_rad),
+            math.cos(angular_distance) - math.sin(lat1_rad) * math.sin(lat2_rad)
+        )
+        
+        # Convert back to degrees
+        dest_lat = math.degrees(lat2_rad)
+        dest_lon = math.degrees(lon2_rad)
+        
+        return dest_lat, dest_lon
+    
     def _calculate_relative_info(self, ownship: Dict[str, Any], intruder: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate relative bearing, distance, and time to CPA"""
         own_lat = ownship.get('latitude', 42.0)
@@ -455,10 +526,16 @@ class StreamlinedLLMClient:
         bearing = self._calculate_bearing(own_lat, own_lon, int_lat, int_lon)
         distance = self._calculate_distance(own_lat, own_lon, int_lat, int_lon)
         
-        # Simple time to CPA calculation (assuming constant velocities)
+        # Enhanced time to CPA calculation considering velocities
         own_spd = ownship.get('speed', 400)
         int_spd = intruder.get('speed', 400)
-        relative_speed = (own_spd + int_spd) / 2  # Approximation
+        own_hdg = ownship.get('heading', 0)
+        int_hdg = intruder.get('heading', 0)
+        
+        # Simple relative speed approximation
+        relative_speed = math.sqrt((own_spd * math.cos(math.radians(own_hdg)) - int_spd * math.cos(math.radians(int_hdg)))**2 + 
+                                 (own_spd * math.sin(math.radians(own_hdg)) - int_spd * math.sin(math.radians(int_hdg)))**2)
+        
         time_to_cpa = (distance / max(relative_speed, 1)) * 60  # Convert to minutes
         
         return {
@@ -482,7 +559,7 @@ class StreamlinedLLMClient:
         return (bearing_deg + 360) % 360
     
     def _calculate_distance(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate distance between two points in nautical miles"""
+        """Calculate distance between two points in nautical miles using haversine formula"""
         lat1_rad = math.radians(lat1)
         lat2_rad = math.radians(lat2)
         dlat_rad = math.radians(lat2 - lat1)
@@ -497,22 +574,68 @@ class StreamlinedLLMClient:
         return earth_radius_nm * c
     
     def _log_interaction(self, conflict_id: str, prompt: str, response: str, parsed: Dict[str, Any]):
-        """Log LLM interaction for debugging"""
+        """Log LLM interaction with enhanced debugging - input/output for 1500 characters"""
         try:
+            # Truncate prompt and response for debugging display (1500 chars each as requested)
+            prompt_debug = prompt[:1500] + "..." if len(prompt) > 1500 else prompt
+            response_debug = response[:1500] + "..." if len(response) > 1500 else response
+            
+            # Print debug information
+            print(f"\n🔍 LLM Debug - Conflict ID: {conflict_id}")
+            print(f"📝 Input ({len(prompt)} chars):")
+            print("-" * 80)
+            print(prompt_debug)
+            print("-" * 80)
+            print(f"🤖 Output ({len(response)} chars):")
+            print("-" * 80)
+            print(response_debug)
+            print("-" * 80)
+            print(f"📊 Parsed: {json.dumps(parsed, indent=2)[:500]}...")
+            print("=" * 80)
+            
+            # Create comprehensive log entry
             log_entry = {
                 'timestamp': time.time(),
                 'conflict_id': conflict_id,
-                'prompt': prompt,
-                'raw_response': response,
-                'parsed_response': parsed
+                'prompt': prompt,  # Full prompt in log file
+                'raw_response': response,  # Full response in log file
+                'parsed_response': parsed,
+                'response_length': len(response),
+                'prompt_length': len(prompt),
+                'model_config': {
+                    'provider': self.config.provider.value,
+                    'model': self.config.model,
+                    'temperature': self.config.temperature
+                },
+                'debug_truncated': {
+                    'prompt_debug': prompt_debug,
+                    'response_debug': response_debug
+                },
+                'interaction_metadata': {
+                    'response_valid_json': isinstance(parsed, dict),
+                    'has_conflicts': parsed.get('conflicts_detected', False) if isinstance(parsed, dict) else False,
+                    'resolution_type': parsed.get('resolution', {}).get('resolution_type', 'unknown') if isinstance(parsed, dict) else 'unknown'
+                }
             }
             
-            log_file = self.log_dir / f"{conflict_id}.json"
-            with open(log_file, 'w') as f:
-                json.dump(log_entry, f, indent=2)
+            # Save to timestamped log file
+            timestamp_str = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+            log_file = self.log_dir / f"{timestamp_str}_{conflict_id}.json"
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(log_entry, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Log saved to: {log_file}")
                 
         except Exception as e:
             print(f"⚠️ Failed to log interaction: {e}")
+            # Fallback: at least print basic debug info
+            try:
+                print(f"🔍 Basic Debug - ID: {conflict_id}")
+                print(f"📝 Input length: {len(prompt)}")
+                print(f"🤖 Output length: {len(response)}")
+                print(f"📊 Parsed type: {type(parsed)}")
+            except:
+                print("⚠️ Complete logging failure")
 
 
 # Compatibility alias

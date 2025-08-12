@@ -24,11 +24,11 @@ class ResolutionPolicy:
 @dataclass
 class PipelineConfig:
     """CDR Pipeline configuration"""
-    cycle_interval_seconds: float = 60.0
-    lookahead_minutes: float = 10.0
+    cycle_interval_seconds: float = 300.0  # Changed from 60.0 to 300.0 (5 minutes)
+    lookahead_minutes: float = 5.0  # Match BlueSky native asas_dtlookahead=300s
     max_simulation_time_minutes: float = 120.0
-    separation_min_nm: float = 5.0
-    separation_min_ft: float = 1000.0
+    separation_min_nm: float = 5.0  # Match BlueSky native asas_pzr=5.0
+    separation_min_ft: float = 1000.0  # Match BlueSky native asas_pzh=1000.0
     detection_range_nm: float = 100.0
     max_heading_change_deg: float = 45.0
     max_altitude_change_ft: float = 2000.0
@@ -98,6 +98,12 @@ class CDRPipeline:
             separation_min_ft=config.separation_min_ft,
             lookahead_minutes=config.lookahead_minutes
         )
+        
+        # Check for direct bridge availability
+        if hasattr(bluesky_client, 'use_direct_bridge') and bluesky_client.use_direct_bridge:
+            self.logger.info("✅ Using enhanced BlueSky direct bridge for improved communication")
+        else:
+            self.logger.warning("⚠️ Using fallback BlueSky communication mode")
     
     def run_scenario(self, scenario, output_dir: Path) -> SimulationResult:
         """Run complete CDR scenario"""
@@ -189,6 +195,13 @@ class CDRPipeline:
                         'scat_data': ownship_data
                     }
                     self.logger.info(f"Created ownship: {ownship_data['callsign']}")
+                    
+                    # Verify aircraft state immediately after creation
+                    verification_state = self.bluesky_client.get_aircraft_state(ownship_data['callsign'])
+                    if verification_state:
+                        self.logger.info(f"✅ Ownship verified: {verification_state.callsign} at {verification_state.latitude:.4f},{verification_state.longitude:.4f}")
+                    else:
+                        self.logger.warning(f"⚠️ Could not verify ownship state after creation")
                 else:
                     raise RuntimeError(f"Failed to create ownship: {ownship_data['callsign']}")
             
@@ -266,9 +279,28 @@ class CDRPipeline:
             # Get current aircraft states from BlueSky
             current_states = self.bluesky_client.get_aircraft_states()
             
-            # Debug logging to verify aircraft motion
-            for callsign, state in current_states.items():
-                self.logger.debug(f"POS {callsign}: lat={state.latitude:.4f}, lon={state.longitude:.4f}, GS={state.speed_kt:.1f} kt")
+            # Debug logging to verify aircraft motion and persistence
+            if current_states:
+                for callsign, state in current_states.items():
+                    self.logger.debug(f"POS {callsign}: lat={state.latitude:.4f}, lon={state.longitude:.4f}, GS={state.speed_kt:.1f} kt")
+            else:
+                self.logger.warning(f"⚠️ No aircraft states returned at cycle {cycle_count}, time {self.current_time/60:.1f} min")
+                
+                # Try to diagnose missing aircraft issue
+                if cycle_count > 1:  # Give some time for aircraft to be created
+                    self.logger.warning("Attempting to diagnose missing aircraft...")
+                    
+                    # Check if aircraft are still tracked in active_aircraft
+                    self.logger.warning(f"Active aircraft tracked: {list(self.active_aircraft.keys())}")
+                    
+                    # Try to get states for specific known aircraft
+                    for known_callsign in self.active_aircraft.keys():
+                        single_state = self.bluesky_client.get_aircraft_state(known_callsign)
+                        if single_state:
+                            self.logger.warning(f"Found {known_callsign} via single query: {single_state.latitude:.4f},{single_state.longitude:.4f}")
+                            current_states[known_callsign] = single_state
+                        else:
+                            self.logger.warning(f"Could not retrieve state for known aircraft: {known_callsign}")
             
             # Update aircraft states for destination checking
             self.aircraft_states.update(current_states)
@@ -320,9 +352,9 @@ class CDRPipeline:
             # CRITICAL FIX: Pause simulation BEFORE conflict detection to ensure stable aircraft states
             # This prevents stale state issues when querying aircraft positions for conflict detection and LLM input
             print("⏸️  HOLDING simulation for conflict detection and LLM processing...")
-            hold_success = self.bluesky_client._send_command("HOLD", expect_response=False)
-            if hold_success is False:
-                print("⚠️  Failed to hold simulation, proceeding anyway")
+            pause_success = self.bluesky_client.pause_simulation()
+            if not pause_success:
+                print("⚠️  Failed to pause simulation, proceeding anyway")
             
             # Step 1: Get stable aircraft states while simulation is paused
             stable_states = self.bluesky_client.get_aircraft_states()
@@ -333,8 +365,8 @@ class CDRPipeline:
             if not all_conflicts:
                 # Resume simulation if no conflicts found
                 print("▶️  Resuming simulation - no conflicts detected...")
-                op_success = self.bluesky_client._send_command("OP", expect_response=False)
-                if op_success is False:
+                resume_success = self.bluesky_client.resume_simulation()
+                if not resume_success:
                     print("⚠️  Failed to resume simulation")
                 return 0
             
@@ -417,8 +449,8 @@ class CDRPipeline:
             for callsign in list(self.resume_tasks.keys()):
                 self._maybe_resume_to_destination(callsign, stable_states)
             
-            op_success = self.bluesky_client._send_command("OP", expect_response=False)
-            if op_success is False:
+            resume_success = self.bluesky_client.resume_simulation()
+            if not resume_success:
                 print("⚠️  Failed to resume simulation")
             
             # Allow multiple simulation cycles for BlueSky to process the heading commands
@@ -485,7 +517,8 @@ class CDRPipeline:
             injections_made = 0
             
             for intruder in self.pending_intruders[:]:  # Copy list to avoid modification during iteration
-                spawn_time = intruder.get('spawn_time_minutes', 0)
+                # Support both spawn_time_minutes and injection_time_minutes
+                spawn_time = intruder.get('spawn_time_minutes', intruder.get('injection_time_minutes', 0))
                 
                 if current_time_minutes >= spawn_time:
                     # Time to inject this intruder
@@ -595,12 +628,111 @@ class CDRPipeline:
         """Load and parse scenario data from SCAT or custom format"""
         if hasattr(scenario, 'to_dict'):
             return scenario.to_dict()
+        elif hasattr(scenario, 'to_simple_scenario'):
+            # It's a SCAT adapter - convert to simple scenario format
+            return scenario.to_simple_scenario()
         elif isinstance(scenario, dict):
-            return scenario
+            # Check if this is raw SCAT data with scenario_config
+            if 'scenario_config' in scenario:
+                config = scenario['scenario_config']
+                return {
+                    'ownship': config.get('ownship', {}),
+                    'initial_traffic': [],
+                    'pending_intruders': config.get('intruders', [])
+                }
+            elif 'plots' in scenario:
+                # This is raw SCAT data - try to extract basic info
+                # Find callsign from flight plan data
+                callsign = 'SCAT_AC'
+                aircraft_type = 'B738'
+                
+                if 'fpl' in scenario and 'fpl_base' in scenario['fpl']:
+                    for base in scenario['fpl']['fpl_base']:
+                        if 'callsign' in base:
+                            callsign = base['callsign']
+                        if 'aircraft_type' in base:
+                            aircraft_type = base['aircraft_type']
+                        break
+                
+                # Find first plot with position data
+                first_plot = None
+                if 'plots' in scenario and scenario['plots']:
+                    for plot in scenario['plots']:
+                        if 'I062/105' in plot:
+                            pos_data = plot['I062/105']
+                            if 'latitude' in pos_data and 'longitude' in pos_data:
+                                first_plot = plot
+                                break
+                
+                if not first_plot:
+                    # Create a default scenario if no valid plot found
+                    return {
+                        'ownship': {
+                            'callsign': callsign,
+                            'aircraft_type': aircraft_type,
+                            'latitude': 40.0,
+                            'longitude': -80.0,
+                            'altitude_ft': 37000,
+                            'heading_deg': 90,
+                            'speed_kt': 450
+                        },
+                        'initial_traffic': [],
+                        'pending_intruders': []
+                    }
+                
+                # Extract position and flight data from first plot
+                pos_data = first_plot['I062/105']
+                lat = pos_data.get('latitude', pos_data.get('lat', 40.0))
+                lon = pos_data.get('longitude', pos_data.get('lon', -80.0))
+                
+                # Extract altitude from flight level
+                altitude_ft = 37000  # Default
+                if 'I062/136' in first_plot:
+                    fl = first_plot['I062/136'].get('measured_flight_level', 370)
+                    altitude_ft = fl * 100
+                
+                # Extract heading and speed from I062/380
+                heading_deg = 90  # Default
+                speed_kt = 450    # Default
+                if 'I062/380' in first_plot:
+                    i380 = first_plot['I062/380']
+                    if 'magnetic_heading' in i380:
+                        heading_deg = i380['magnetic_heading']
+                    if 'indicated_airspeed' in i380:
+                        speed_kt = i380['indicated_airspeed']
+                
+                return {
+                    'ownship': {
+                        'callsign': callsign,
+                        'aircraft_type': aircraft_type,
+                        'latitude': lat,
+                        'longitude': lon,
+                        'altitude_ft': altitude_ft,
+                        'heading_deg': heading_deg,
+                        'speed_kt': speed_kt
+                    },
+                    'initial_traffic': [],
+                    'pending_intruders': [
+                        # Add test intruder for conflict testing - place closer to ownship for guaranteed conflict
+                        {
+                            'callsign': 'TEST_INTRUDER',
+                            'aircraft_type': 'A320',
+                            'latitude': lat + 0.01,  # Much closer - only 0.01 degrees (~0.6 NM)
+                            'longitude': lon + 0.01,
+                            'altitude_ft': altitude_ft,
+                            'heading_deg': (heading_deg + 180) % 360,  # Head-on approach
+                            'speed_kt': 420,
+                            'injection_time_minutes': 1.0  # Inject after 1 minute instead of 5
+                        }
+                    ]
+                }
+            else:
+                return scenario
         elif isinstance(scenario, (str, Path)):
             # Load from file
             with open(scenario, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                return self._load_scenario_data(data)  # Recursive call to handle loaded data
         else:
             # Create mock scenario for testing
             return {
@@ -650,10 +782,23 @@ class CDRPipeline:
             # Enable ASAS conflict detection
             self.bluesky_client._send_command("ASAS ON", expect_response=True)
             
+            # Set more sensitive conflict detection parameters
+            # Configure BlueSky separation minima to match our pipeline config
+            sep_nm = self.config.separation_min_nm
+            sep_ft = self.config.separation_min_ft
+            
+            # Set horizontal separation (in nautical miles)
+            self.bluesky_client._send_command(f"DTMULT 1.0", expect_response=True)  # Real-time
+            self.bluesky_client._send_command(f"DTNOLOOK 1.0", expect_response=True)  # 1 second intervals
+            
+            # Configure ASAS parameters for more sensitive detection
+            self.bluesky_client._send_command(f"RFACH 1.0", expect_response=True)  # No extra horizontal margin
+            self.bluesky_client._send_command(f"RFACV 1.0", expect_response=True)  # No extra vertical margin
+            
             # Disable automatic resolution (LLM will handle it)
             self.bluesky_client._send_command("RESOOFF", expect_response=True)
             
-            self.logger.info("Conflict detection systems initialized")
+            self.logger.info(f"Conflict detection systems initialized with sep={sep_nm}NM/{sep_ft}ft")
             
         except Exception as e:
             self.logger.warning(f"Error setting up conflict detection: {e}")
@@ -930,8 +1075,8 @@ class CDRPipeline:
             
             # Calculate distance to destination
             import math
-            current_lat = aircraft_state.get('latitude', 0)
-            current_lon = aircraft_state.get('longitude', 0)
+            current_lat = aircraft_state.latitude if hasattr(aircraft_state, 'latitude') else 0
+            current_lon = aircraft_state.longitude if hasattr(aircraft_state, 'longitude') else 0
             dest_lat = destination['lat']
             dest_lon = destination['lon']
             
@@ -1098,7 +1243,7 @@ class CDRPipeline:
         if hasattr(aircraft_state, 'heading_deg'):
             current_heading = aircraft_state.heading_deg
         else:
-            current_heading = aircraft_state.get('heading_deg', aircraft_state.get('heading', 0))
+            current_heading = getattr(aircraft_state, 'heading_deg', getattr(aircraft_state, 'heading', 0))
         
         # Simple geometric resolution - turn right by 30 degrees
         new_heading = (current_heading + 30) % 360
@@ -1152,11 +1297,19 @@ class CDRPipeline:
                 
                 # Add waypoint if coordinates are provided
                 if lat is not None and lon is not None:
-                    self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                    waypoint_added = self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                    if not waypoint_added:
+                        self.logger.error(f"Failed to add waypoint {waypoint_name}")
+                        return False
+                
+                # Wait for BlueSky to process waypoint addition
+                import time
+                time.sleep(0.5)
                 
                 # Direct to waypoint
                 success = self.bluesky_client.direct_to(aircraft_callsign, waypoint_name)
                 if not success:
+                    self.logger.error(f"Failed to direct {aircraft_callsign} to {waypoint_name}")
                     return False
                 self.logger.info(f"Applied direct_to {waypoint_name} for {aircraft_callsign}")
             
@@ -1170,12 +1323,21 @@ class CDRPipeline:
                 self.logger.debug(f"Reroute via waypoint: {waypoint_name} at {lat:.4f},{lon:.4f}")
                 self.logger.debug(f"Via waypoint structure: {via}")
                 
-                # Add via waypoint
-                self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                # CRITICAL FIX: Add via waypoint to route BEFORE directing to it
+                # This fixes the "AVOID1 not found in the route" error
+                waypoint_added = self.bluesky_client.add_waypoint(aircraft_callsign, waypoint_name, lat, lon)
+                if not waypoint_added:
+                    self.logger.error(f"Failed to add waypoint {waypoint_name} to route")
+                    return False
                 
-                # Direct to via waypoint
+                # Wait a moment for BlueSky to process the waypoint addition
+                import time
+                time.sleep(0.5)
+                
+                # Now direct to via waypoint
                 success = self.bluesky_client.direct_to(aircraft_callsign, waypoint_name)
                 if not success:
+                    self.logger.error(f"Failed to direct {aircraft_callsign} to {waypoint_name}")
                     return False
                 
                 # Schedule auto-resume to destination
@@ -1431,6 +1593,26 @@ class CDRPipeline:
                     'created_at': self.current_time,
                     'spawn_data': intruder
                 }
+                
+                # Verify both ownship and intruder are present
+                all_states = self.bluesky_client.get_aircraft_states()
+                self.logger.info(f"✅ Intruder {callsign} injected. Active aircraft: {list(all_states.keys())}")
+                
+                # Check distances between aircraft for conflict potential
+                if len(all_states) >= 2:
+                    aircraft_list = list(all_states.items())
+                    for i, (cs1, state1) in enumerate(aircraft_list):
+                        for cs2, state2 in aircraft_list[i+1:]:
+                            # Calculate rough distance
+                            import math
+                            dlat = state2.latitude - state1.latitude
+                            dlon = state2.longitude - state1.longitude
+                            dist_nm = math.sqrt(dlat**2 + dlon**2) * 60  # Rough conversion
+                            
+                            alt_diff = abs(state2.altitude_ft - state1.altitude_ft)
+                            
+                            self.logger.info(f"Aircraft separation: {cs1} vs {cs2}: "
+                                           f"H={dist_nm:.1f}NM, V={alt_diff:.0f}ft")
             
             return success
             

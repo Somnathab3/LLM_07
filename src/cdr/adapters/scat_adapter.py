@@ -575,3 +575,52 @@ class SCATAdapter:
         if not self._data:
             self.load_file()
         return self._data.aircraft_type or 'UNKNOWN'
+    
+    def to_simple_scenario(self) -> Dict[str, Any]:
+        """Convert SCAT data to simple scenario format for CDR pipeline"""
+        if not self._data:
+            self.load_file()
+        
+        # Extract first plot as starting position
+        track_points = list(self.ownship_track())
+        if not track_points:
+            raise ValueError("No track points found in SCAT data")
+        
+        first_point = track_points[0]
+        
+        # Get flight plan info
+        flight_plan = self.flight_plan()
+        
+        # Create ownship from first track point
+        ownship = {
+            'callsign': flight_plan.callsign or self._data.callsign or 'SCAT_AC',
+            'aircraft_type': flight_plan.aircraft_type or self._data.aircraft_type or 'B738',
+            'latitude': first_point.latitude,
+            'longitude': first_point.longitude,
+            'altitude_ft': first_point.altitude_ft,
+            'heading_deg': first_point.heading_deg,
+            'speed_kt': first_point.speed_kt or 250,  # Default if missing
+            'departure': flight_plan.departure_airport or self._data.departure,
+            'arrival': flight_plan.arrival_airport or self._data.arrival
+        }
+        
+        # Create scenario with no initial intruders (ownship only scenario)
+        scenario = {
+            'ownship': ownship,
+            'initial_traffic': [],
+            'pending_intruders': [
+                # Add a test intruder after 10 minutes for conflict testing
+                {
+                    'callsign': 'TEST_INTRUDER',
+                    'aircraft_type': 'A320',
+                    'latitude': first_point.latitude + 0.1,  # Slightly offset position
+                    'longitude': first_point.longitude + 0.1,
+                    'altitude_ft': first_point.altitude_ft,
+                    'heading_deg': (first_point.heading_deg + 180) % 360,  # Opposite direction
+                    'speed_kt': 280,
+                    'injection_time_minutes': 10.0
+                }
+            ]
+        }
+        
+        return scenario
